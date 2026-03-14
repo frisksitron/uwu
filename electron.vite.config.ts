@@ -4,7 +4,13 @@ import { defineConfig } from 'electron-vite'
 import solid from 'vite-plugin-solid'
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      externalizeDeps: {
+        exclude: ['electron-updater', 'electron-store', '@electron-toolkit/utils', 'smol-toml']
+      }
+    }
+  },
   preload: {},
   renderer: {
     resolve: {
