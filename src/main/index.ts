@@ -4,6 +4,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
 import { setupProjectIpc } from './ipc/project'
 import { killAllTerminals, setupTerminalIpc } from './ipc/terminal'
+import { setupUpdaterIpc } from './ipc/updater'
 import { setupWindowIpc } from './ipc/window'
 import { setupWorktreeIpc } from './ipc/worktree'
 
@@ -39,6 +40,7 @@ function createWindow(): void {
 
   setupTerminalIpc(mainWindow)
   setupWindowIpc(mainWindow)
+  setupUpdaterIpc(mainWindow)
 }
 
 app.whenReady().then(() => {

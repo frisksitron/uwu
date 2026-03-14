@@ -100,6 +100,41 @@ const windowAPI = {
   }
 }
 
+const updaterAPI = {
+  check: (): Promise<unknown> => ipcRenderer.invoke('updater:check'),
+  install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
+  onChecking: (cb: () => void): (() => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('updater:checking', handler)
+    return () => ipcRenderer.removeListener('updater:checking', handler)
+  },
+  onAvailable: (cb: (info: unknown) => void): (() => void) => {
+    const handler = (_: unknown, info: unknown): void => cb(info)
+    ipcRenderer.on('updater:available', handler)
+    return () => ipcRenderer.removeListener('updater:available', handler)
+  },
+  onNotAvailable: (cb: () => void): (() => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('updater:not-available', handler)
+    return () => ipcRenderer.removeListener('updater:not-available', handler)
+  },
+  onProgress: (cb: (progress: unknown) => void): (() => void) => {
+    const handler = (_: unknown, progress: unknown): void => cb(progress)
+    ipcRenderer.on('updater:progress', handler)
+    return () => ipcRenderer.removeListener('updater:progress', handler)
+  },
+  onDownloaded: (cb: (info: unknown) => void): (() => void) => {
+    const handler = (_: unknown, info: unknown): void => cb(info)
+    ipcRenderer.on('updater:downloaded', handler)
+    return () => ipcRenderer.removeListener('updater:downloaded', handler)
+  },
+  onError: (cb: (message: string) => void): (() => void) => {
+    const handler = (_: unknown, message: string): void => cb(message)
+    ipcRenderer.on('updater:error', handler)
+    return () => ipcRenderer.removeListener('updater:error', handler)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
@@ -107,6 +142,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('projectAPI', projectAPI)
     contextBridge.exposeInMainWorld('worktreeAPI', worktreeAPI)
     contextBridge.exposeInMainWorld('windowAPI', windowAPI)
+    contextBridge.exposeInMainWorld('updaterAPI', updaterAPI)
   } catch (error) {
     console.error(error)
   }
@@ -121,4 +157,6 @@ if (process.contextIsolated) {
   window.worktreeAPI = worktreeAPI
   // @ts-expect-error (window.windowAPI is not in the declared Window type)
   window.windowAPI = windowAPI
+  // @ts-expect-error (window.updaterAPI is not in the declared Window type)
+  window.updaterAPI = updaterAPI
 }

@@ -4,6 +4,7 @@ out
 .DS_Store
 .eslintcache
 *.log*
+dev-app-update.yml
 .claude/
 .vscode/settings.json
 .vscode/launch.json

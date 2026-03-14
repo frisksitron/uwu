@@ -38,4 +38,8 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
+publish:
+  provider: github
+  owner: frisksitron
+  repo: uwu
 npmRebuild: false

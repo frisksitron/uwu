@@ -71,6 +71,17 @@ interface WindowAPI {
   onMaximizedChange: (cb: (maximized: boolean) => void) => () => void
 }
 
+interface UpdaterAPI {
+  check: () => Promise<unknown>
+  install: () => Promise<void>
+  onChecking: (cb: () => void) => () => void
+  onAvailable: (cb: (info: unknown) => void) => () => void
+  onNotAvailable: (cb: () => void) => () => void
+  onProgress: (cb: (progress: unknown) => void) => () => void
+  onDownloaded: (cb: (info: unknown) => void) => () => void
+  onError: (cb: (message: string) => void) => () => void
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -79,5 +90,6 @@ declare global {
     projectAPI: ProjectAPI
     worktreeAPI: WorktreeAPI
     windowAPI: WindowAPI
+    updaterAPI: UpdaterAPI
   }
 }

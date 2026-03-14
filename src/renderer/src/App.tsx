@@ -3,6 +3,7 @@ import ScriptView from './components/ScriptView'
 import Sidebar from './components/Sidebar'
 import Terminal from './components/Terminal'
 import TitleBar from './components/TitleBar'
+import UpdateBanner from './components/UpdateBanner'
 import { loadProjects, saveProjects, setStore, store } from './store'
 import type { Project, Tab, TerminalCacheEntry } from './types'
 
@@ -109,6 +110,7 @@ export default function App(): JSX.Element {
   return (
     <div class="flex flex-col w-full h-full">
       <TitleBar />
+      <UpdateBanner />
       <div class="flex flex-1 overflow-hidden">
         <Sidebar
           store={store}
