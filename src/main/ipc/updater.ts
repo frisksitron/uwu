@@ -1,5 +1,7 @@
 import { type BrowserWindow, ipcMain } from 'electron'
-import { autoUpdater } from 'electron-updater'
+import pkg from 'electron-updater'
+
+const { autoUpdater } = pkg
 
 export function setupUpdaterIpc(mainWindow: BrowserWindow): void {
   autoUpdater.autoDownload = true
