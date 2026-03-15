@@ -44,5 +44,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NOTES=$(gh api repos/{owner}/{repo}/releases/generate-notes -f tag_name="$GITHUB_REF_NAME" --jq .body)
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
+          ARGS=(-f tag_name="$GITHUB_REF_NAME")
+          if [ -n "$PREV_TAG" ]; then
+            ARGS+=(-f previous_tag_name="$PREV_TAG")
+          fi
+          NOTES=$(gh api repos/{owner}/{repo}/releases/generate-notes "${ARGS[@]}" --jq .body)
           gh release edit "$GITHUB_REF_NAME" --notes "$NOTES"
