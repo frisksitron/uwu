@@ -70,25 +70,27 @@ function CodeBlock(props: { code: string; lang: string }): JSX.Element {
 
   return (
     <div class="relative group">
-      <Show when={props.lang && props.lang !== 'text'}>
-        <span class="absolute top-1.5 left-2.5 text-[10px] text-muted/60 opacity-0 group-hover:opacity-100 transition-opacity select-none pointer-events-none z-10">
-          {props.lang}
-        </span>
-      </Show>
       <button
         type="button"
         onClick={handleCopy}
-        class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-sidebar/80 hover:bg-hover border border-border rounded p-1 cursor-pointer z-10 flex items-center"
+        class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center gap-1 text-[10px] z-10"
         title={copied() ? 'Copied!' : 'Copy code'}
       >
-        <Show when={copied()} fallback={<Copy size={11} class="text-muted" />}>
-          <Check size={11} class="text-success" />
+        <Show
+          when={copied()}
+          fallback={
+            <>
+              <Copy size={11} /> Copy
+            </>
+          }
+        >
+          <Check size={11} class="text-success" /> Copied
         </Show>
       </button>
       <Show
         when={html()}
         fallback={
-          <pre class="bg-app border border-border rounded p-2 overflow-x-auto text-[12px] leading-relaxed">
+          <pre class="bg-app border border-border rounded p-2.5 overflow-x-auto text-[12px] leading-relaxed">
             <code class="text-content">{props.code}</code>
           </pre>
         }

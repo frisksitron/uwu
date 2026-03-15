@@ -53,10 +53,16 @@
 .markdown h5,
 .markdown h6 { font-size: 1em; }
 
-.markdown ul,
+.markdown ul {
+  padding-left: 1.25em;
+  margin: 0.35em 0;
+  list-style-type: disc;
+}
+
 .markdown ol {
   padding-left: 1.25em;
   margin: 0.35em 0;
+  list-style-type: decimal;
 }
 
 .markdown li {

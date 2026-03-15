@@ -47,6 +47,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   const [loaded, setLoaded] = createSignal(false)
   let scrollRef: HTMLDivElement | undefined
   let contentRef: HTMLDivElement | undefined
+  let lastScrollTop = 0
 
   onMount(async () => {
     await startServer(props.projectPath)
@@ -100,8 +101,15 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
   function handleScroll(): void {
     if (!scrollRef) return
-    const distFromBottom = scrollRef.scrollHeight - scrollRef.scrollTop - scrollRef.clientHeight
-    setLockedToBottom(distFromBottom <= 50)
+    const { scrollHeight, scrollTop, clientHeight } = scrollRef
+    const distFromBottom = scrollHeight - scrollTop - clientHeight
+    // Only unlock if the user actively scrolled up
+    if (scrollTop < lastScrollTop) {
+      setLockedToBottom(distFromBottom <= 50)
+    } else {
+      if (distFromBottom <= 50) setLockedToBottom(true)
+    }
+    lastScrollTop = scrollTop
   }
 
   function scrollToBottom(): void {
