@@ -151,13 +151,15 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       payload: {
         parts: Array<{ type: 'text'; text: string }>
         model?: { providerID: string; modelID: string }
+        agent?: string
       }
     ) => {
       const client = getClient(projectPath)
       await client.session.promptAsync({
         sessionID: sessionId,
         parts: payload.parts,
-        model: payload.model
+        model: payload.model,
+        agent: payload.agent
       })
     }
   )
@@ -205,6 +207,12 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
   ipcMain.handle('opencode:config', async (_event, projectPath: string) => {
     const client = getClient(projectPath)
     const result = await client.config.get()
+    return result.data
+  })
+
+  ipcMain.handle('opencode:agents', async (_event, projectPath: string) => {
+    const client = getClient(projectPath)
+    const result = await client.app.agents()
     return result.data
   })
 }

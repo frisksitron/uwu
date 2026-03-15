@@ -87,6 +87,7 @@ interface OpencodeAPI {
     payload: {
       parts: Array<{ type: 'text'; text: string }>
       model?: { providerID: string; modelID: string }
+      agent?: string
     }
   ) => Promise<void>
   permissionRespond: (
@@ -103,6 +104,7 @@ interface OpencodeAPI {
   questionReject: (projectPath: string, requestId: string) => Promise<void>
   providers: (projectPath: string) => Promise<unknown>
   config: (projectPath: string) => Promise<unknown>
+  agents: (projectPath: string) => Promise<unknown>
   onEvent: (cb: (projectPath: string, event: unknown) => void) => () => void
 }
 

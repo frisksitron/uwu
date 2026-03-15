@@ -124,6 +124,7 @@ const opencodeAPI = {
     payload: {
       parts: Array<{ type: 'text'; text: string }>
       model?: { providerID: string; modelID: string }
+      agent?: string
     }
   ): Promise<void> => ipcRenderer.invoke('opencode:send-message', projectPath, sessionId, payload),
   permissionRespond: (
@@ -151,6 +152,8 @@ const opencodeAPI = {
     ipcRenderer.invoke('opencode:providers', projectPath),
   config: (projectPath: string): Promise<unknown> =>
     ipcRenderer.invoke('opencode:config', projectPath),
+  agents: (projectPath: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:agents', projectPath),
   onEvent: (cb: (projectPath: string, event: unknown) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, projectPath: string, event: unknown): void =>
       cb(projectPath, event)
