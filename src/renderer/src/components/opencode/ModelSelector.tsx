@@ -66,7 +66,7 @@ export default function ModelSelector(props: ModelSelectorProps): JSX.Element {
           const [providerID, ...rest] = val.split(':')
           props.onChange({ providerID, modelID: rest.join(':') })
         }}
-        class="bg-app border border-border rounded px-2 py-0.5 text-[11px] text-content cursor-pointer focus:outline-none focus:border-accent transition-colors"
+        class="bg-transparent border-none rounded px-1 py-0.5 text-[10px] text-muted hover:text-content cursor-pointer focus:outline-none transition-colors min-w-0 max-w-36 truncate"
         title={`Model: ${label()}`}
       >
         <option value="">Default</option>

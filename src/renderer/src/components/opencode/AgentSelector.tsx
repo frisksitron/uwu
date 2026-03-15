@@ -35,7 +35,7 @@ export default function AgentSelector(props: AgentSelectorProps): JSX.Element {
           const val = e.currentTarget.value
           props.onChange(val || undefined)
         }}
-        class="bg-app border border-border rounded px-2 py-0.5 text-[11px] text-content cursor-pointer focus:outline-none focus:border-accent transition-colors"
+        class="bg-transparent border-none rounded px-1 py-0.5 text-[10px] text-muted hover:text-content cursor-pointer focus:outline-none transition-colors min-w-0 max-w-28 truncate"
         title={`Agent: ${props.value || 'Default'}`}
       >
         <option value="">Default</option>

@@ -58,19 +58,21 @@ export default function ScriptView(props: ScriptViewProps): JSX.Element {
       }}
     >
       {/* Topbar */}
-      <div class="flex items-center gap-2 px-3 h-8 border-b border-border bg-sidebar flex-shrink-0">
-        <Show when={phase() === 'running'}>
-          <Loader2 size={11} class="animate-spin flex-shrink-0 text-status-running" />
-        </Show>
-        <code class="flex-1 text-[12px] text-content truncate">{props.command}</code>
+      <div class="flex items-center gap-2 px-3 h-9 border-b border-border bg-sidebar flex-shrink-0">
+        <span class="flex-1 flex items-center gap-1.5 text-[12px] text-content truncate font-medium min-w-0">
+          <Show when={phase() === 'running'}>
+            <Loader2 size={11} class="animate-spin flex-shrink-0 text-status-running" />
+          </Show>
+          <span class="truncate">{props.command}</span>
+        </span>
         <Show when={phase() === 'running'}>
           <button
             type="button"
             onClick={stop}
-            class="bg-transparent hover:bg-hover border-none cursor-pointer p-0.5 rounded transition-colors flex items-center opacity-85 hover:opacity-100 text-status-stop"
+            class="bg-transparent hover:bg-hover border-none cursor-pointer px-1.5 h-7 rounded transition-colors flex items-center text-muted hover:text-content"
             title="Stop"
           >
-            <Square size={12} />
+            <Square size={14} />
             <span class="ml-1 text-[12px]">Stop</span>
           </button>
         </Show>
@@ -78,10 +80,10 @@ export default function ScriptView(props: ScriptViewProps): JSX.Element {
           <button
             type="button"
             onClick={run}
-            class="bg-transparent hover:bg-hover border-none cursor-pointer p-0.5 rounded transition-colors flex items-center opacity-85 hover:opacity-100 text-status-action"
+            class="bg-transparent hover:bg-hover border-none cursor-pointer px-1.5 h-7 rounded transition-colors flex items-center text-muted hover:text-content"
             title={phase() === 'idle' ? 'Run' : 'Rerun'}
           >
-            {phase() === 'idle' ? <Play size={12} /> : <RotateCcw size={12} />}
+            {phase() === 'idle' ? <Play size={14} /> : <RotateCcw size={14} />}
             <span class="ml-1 text-[12px]">{phase() === 'idle' ? 'Run' : 'Rerun'}</span>
           </button>
         </Show>

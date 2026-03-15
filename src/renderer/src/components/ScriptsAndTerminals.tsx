@@ -71,19 +71,20 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
       <For each={terminalsForCwd()}>
         {(pt) => (
           <div
+            role="menuitem"
+            tabIndex={0}
             class="group/pt flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
             style={{ 'padding-left': `${props.indent}px` }}
             classList={{ 'bg-active': props.isPtActive(pt.id) }}
+            onClick={() => props.onOpenTerminal(props.project, pt)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') props.onOpenTerminal(props.project, pt)
+            }}
           >
             <SquareTerminal size={11} class="flex-shrink-0 mr-[5px] text-icon-terminal" />
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: double-click to rename terminal label */}
             <span
-              role="menuitem"
-              tabIndex={0}
               class="flex-1 flex items-center gap-1.5 min-w-0"
-              onClick={() => props.onOpenTerminal(props.project, pt)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') props.onOpenTerminal(props.project, pt)
-              }}
               onDblClick={(e) => {
                 e.stopPropagation()
                 props.onStartRename(pt.id, pt.label)
@@ -137,9 +138,16 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
 
           return (
             <div
+              role="menuitem"
+              tabIndex={0}
               class="group/ai flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
               style={{ 'padding-left': `${props.indent}px` }}
               classList={{ 'bg-active': props.isOcInstanceActive(oc.id) }}
+              onClick={() => props.onOpenOpencodeInstance(props.project, oc)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ')
+                  props.onOpenOpencodeInstance(props.project, oc)
+              }}
             >
               <Switch>
                 <Match when={needsAttention()}>
@@ -158,18 +166,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
                   <Sparkles size={11} class="flex-shrink-0 mr-[5px] text-icon-ai" />
                 </Match>
               </Switch>
-              <span
-                role="menuitem"
-                tabIndex={0}
-                class="flex-1 min-w-0 truncate"
-                onClick={() => props.onOpenOpencodeInstance(props.project, oc)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ')
-                    props.onOpenOpencodeInstance(props.project, oc)
-                }}
-              >
-                {oc.label}
-              </span>
+              <span class="flex-1 min-w-0 truncate">{oc.label}</span>
               <button
                 type="button"
                 onClick={(e) => {
