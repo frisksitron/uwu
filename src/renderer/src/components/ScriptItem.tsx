@@ -46,7 +46,7 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
       style={{ 'padding-left': `${props.indent}px` }}
       classList={{ 'bg-active': props.isActive }}
     >
-      <Scroll size={11} class="flex-shrink-0 mr-[5px] text-muted" />
+      <Scroll size={11} class="flex-shrink-0 mr-[5px] text-content/70" />
       <span class="truncate flex-shrink-0">{props.scriptName}</span>
       <Show when={props.status === 'running'}>
         <Show when={props.tab}>

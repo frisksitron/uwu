@@ -1,9 +1,11 @@
 import { createSignal, For, type JSX, onCleanup, onMount } from 'solid-js'
+import OpencodeView from './components/OpencodeView'
 import ScriptView from './components/ScriptView'
 import Sidebar from './components/Sidebar'
 import Terminal from './components/Terminal'
 import TitleBar from './components/TitleBar'
 import UpdateBanner from './components/UpdateBanner'
+import { initEventListener } from './opencodeStore'
 import { loadProjects, saveProjects, setStore, store } from './store'
 import type { Project, Tab, TerminalCacheEntry } from './types'
 
@@ -11,6 +13,12 @@ const terminalSnapshots = new Map<string, { lastOutput: string; title: string }>
 
 export default function App(): JSX.Element {
   onMount(() => loadProjects())
+
+  let cleanupEvents: (() => void) | undefined
+  onMount(() => {
+    cleanupEvents = initEventListener()
+  })
+  onCleanup(() => cleanupEvents?.())
 
   const handleBeforeUnload = (): void => {
     if (terminalSnapshots.size === 0) return
@@ -107,6 +115,40 @@ export default function App(): JSX.Element {
     saveProjects()
   }
 
+  function handleSessionChange(tab: Tab, sessionId: string): void {
+    setStore('tabs', (t) => t.tabId === tab.tabId, 'sessionId', sessionId)
+    if (tab.opencodeInstanceId) {
+      setStore(
+        'projects',
+        (p) => p.id === tab.projectId,
+        'opencodeInstances',
+        (instances) =>
+          (instances ?? []).map((i) => (i.id === tab.opencodeInstanceId ? { ...i, sessionId } : i))
+      )
+      saveProjects()
+    }
+  }
+
+  function handleTitleChange(tab: Tab, title: string): void {
+    setStore('tabs', (t) => t.tabId === tab.tabId, 'label', title)
+    if (tab.opencodeInstanceId) {
+      const project = store.projects.find((p) => p.id === tab.projectId)
+      const instance = project?.opencodeInstances?.find((i) => i.id === tab.opencodeInstanceId)
+      if (instance && title !== instance.label) {
+        setStore(
+          'projects',
+          (p) => p.id === tab.projectId,
+          'opencodeInstances',
+          (instances) =>
+            (instances ?? []).map((i) =>
+              i.id === tab.opencodeInstanceId ? { ...i, label: title } : i
+            )
+        )
+        saveProjects()
+      }
+    }
+  }
+
   return (
     <div class="flex flex-col w-full h-full">
       <TitleBar />
@@ -136,7 +178,16 @@ export default function App(): JSX.Element {
             {(tab) => {
               const project = (): Project | undefined =>
                 store.projects.find((p) => p.id === tab.projectId)
-              return tab.type === 'script' ? (
+              return tab.type === 'opencode' ? (
+                <OpencodeView
+                  tabId={tab.tabId}
+                  visible={store.activeTabId === tab.tabId}
+                  projectPath={tab.cwd}
+                  sessionId={tab.sessionId as string}
+                  onSessionChange={(sessionId) => handleSessionChange(tab, sessionId)}
+                  onTitleChange={(title) => handleTitleChange(tab, title)}
+                />
+              ) : tab.type === 'script' ? (
                 <ScriptView
                   tabId={tab.tabId}
                   visible={store.activeTabId === tab.tabId}

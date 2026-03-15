@@ -2,8 +2,16 @@ import { ChevronDown, ChevronRight, FolderPlus, Plus, RefreshCw, Settings, X } f
 import { createEffect, For, type JSX, onMount, Show } from 'solid-js'
 import type { SetStoreFunction } from 'solid-js/store'
 import { createStore } from 'solid-js/store'
+import { createSession, startServer } from '../opencodeStore'
 import { runScript } from '../scriptActions'
-import type { AppState, PersistentTerminal, Project, Tab, WorktreeInfo } from '../types'
+import type {
+  AppState,
+  OpencodeInstance,
+  PersistentTerminal,
+  Project,
+  Tab,
+  WorktreeInfo
+} from '../types'
 import CreateWorktreeDialog from './CreateWorktreeDialog'
 import ProjectSettings from './ProjectSettings'
 import ScriptsAndTerminals, { type ScriptsAndTerminalsProps } from './ScriptsAndTerminals'
@@ -266,6 +274,67 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     props.onSaveProjects()
   }
 
+  function openOpencodeInstance(project: Project, instance: OpencodeInstance): void {
+    const existing = props.store.tabs.find((t) => t.opencodeInstanceId === instance.id)
+    if (existing) {
+      props.setStore('activeTabId', existing.tabId)
+    } else {
+      const cwd = instance.worktreePath || project.path
+      const tab: Tab = {
+        tabId: crypto.randomUUID(),
+        label: instance.label,
+        cwd,
+        projectId: project.id,
+        type: 'opencode',
+        opencodeInstanceId: instance.id,
+        sessionId: instance.sessionId
+      }
+      props.onAddTab(tab)
+    }
+  }
+
+  function removeOpencodeInstance(project: Project, instanceId: string): void {
+    const tab = props.store.tabs.find((t) => t.opencodeInstanceId === instanceId)
+    if (tab) props.onCloseTab(tab.tabId)
+    props.setStore(
+      'projects',
+      (p) => p.id === project.id,
+      'opencodeInstances',
+      (instances) => (instances ?? []).filter((i) => i.id !== instanceId)
+    )
+    props.onSaveProjects()
+  }
+
+  async function createOpencodeInstance(project: Project, worktreePath?: string): Promise<void> {
+    const cwd = worktreePath || project.path
+    const started = await startServer(cwd)
+    if (!started) return
+
+    const session = await createSession(cwd)
+    if (!session) return
+
+    const instancesForCwd = (project.opencodeInstances ?? []).filter(
+      (i) => (i.worktreePath || project.path) === cwd
+    )
+    const count = instancesForCwd.length
+    const label = count === 0 ? 'AI Chat' : `AI Chat ${count + 1}`
+
+    const instance: OpencodeInstance = {
+      id: crypto.randomUUID(),
+      sessionId: session.id,
+      label,
+      worktreePath
+    }
+    props.setStore(
+      'projects',
+      (p) => p.id === project.id,
+      'opencodeInstances',
+      (instances) => [...(instances ?? []), instance]
+    )
+    props.onSaveProjects()
+    openOpencodeInstance(project, instance)
+  }
+
   function confirmRename(project: Project, ptId: string): void {
     const name = state.renameValue.trim()
     setState({ renamingTerminalId: null, renameValue: '' })
@@ -289,6 +358,12 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     )
   }
 
+  function isOcInstanceActive(instanceId: string): boolean {
+    return props.store.tabs.some(
+      (t) => t.opencodeInstanceId === instanceId && t.tabId === props.store.activeTabId
+    )
+  }
+
   async function removeWorktree(project: Project, wt: WorktreeInfo): Promise<void> {
     const result = await window.worktreeAPI.remove(project.path, wt.path, false)
     if (!result.success) {
@@ -306,6 +381,12 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       (p) => p.id === project.id,
       'persistentTerminals',
       (pts) => pts.filter((pt) => pt.worktreePath !== wt.path)
+    )
+    props.setStore(
+      'projects',
+      (p) => p.id === project.id,
+      'opencodeInstances',
+      (instances) => (instances ?? []).filter((i) => i.worktreePath !== wt.path)
     )
     props.onSaveProjects()
 
@@ -345,7 +426,11 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       isScriptActive: (scriptName, cwd) => isScriptActive(project, scriptName, cwd),
       scriptStatus: (scriptName, cwd) => scriptStatus(project, scriptName, cwd),
       getScriptTab: (scriptName, cwd) => getScriptTab(project, scriptName, cwd),
-      isPtActive
+      isPtActive,
+      onCreateOpencodeInstance: (wtp) => createOpencodeInstance(project, wtp),
+      onOpenOpencodeInstance: openOpencodeInstance,
+      onRemoveOpencodeInstance: removeOpencodeInstance,
+      isOcInstanceActive
     }
   }
 
