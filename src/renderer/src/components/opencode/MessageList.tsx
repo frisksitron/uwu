@@ -1,10 +1,22 @@
-import { CheckCircle2, ChevronDown, ChevronRight, Loader2, Terminal, XCircle } from 'lucide-solid'
-import { createEffect, createSignal, For, type JSX, Match, Show, Switch } from 'solid-js'
+import {
+  AlertTriangle,
+  Brain,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  KeyRound,
+  Loader2,
+  Terminal,
+  XCircle
+} from 'lucide-solid'
+import { createSignal, For, type JSX, Match, Show, Switch } from 'solid-js'
 import type {
   OcMessage,
+  OcMessageError,
   OcPart,
   OcPermission,
   OcQuestion,
+  OcReasoningPart,
   OcTextPart,
   OcToolPart
 } from '../../opencodeStore'
@@ -61,13 +73,6 @@ function groupParts(parts: OcPart[]): GroupedItem[] {
 
 function ToolCard(props: { part: OcToolPart }): JSX.Element {
   const [expanded, setExpanded] = createSignal(false)
-
-  // Auto-expand when running
-  createEffect(() => {
-    if (props.part.state.status === 'running') {
-      setExpanded(true)
-    }
-  })
 
   const statusIcon = (): JSX.Element => {
     switch (props.part.state.status) {
@@ -165,6 +170,52 @@ function ToolCallGroup(props: { parts: OcToolPart[] }): JSX.Element {
   )
 }
 
+function ReasoningBlock(props: {
+  part: OcReasoningPart
+  streamingContent: Record<string, string>
+}): JSX.Element {
+  const [expanded, setExpanded] = createSignal(false)
+
+  const text = (): string => props.streamingContent[props.part.id] || props.part.text
+  const isStreaming = () => !props.part.endTime
+  const duration = (): string | undefined => {
+    if (!props.part.startTime || !props.part.endTime) return undefined
+    const ms = props.part.endTime - props.part.startTime
+    return formatDuration(ms)
+  }
+
+  return (
+    <div class="rounded-md text-[12px]">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded())}
+        class="flex items-center gap-1.5 px-0 py-0.5 bg-transparent border-none cursor-pointer text-left text-muted hover:text-content transition-colors"
+      >
+        <span class="flex-shrink-0">
+          {expanded() ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+        <Show
+          when={!isStreaming()}
+          fallback={
+            <>
+              <Loader2 size={11} class="animate-spin text-accent" />
+              <span class="text-[11px] italic">Thinking...</span>
+            </>
+          }
+        >
+          <Brain size={11} />
+          <span class="text-[11px] italic">Thought{duration() ? ` for ${duration()}` : ''}</span>
+        </Show>
+      </button>
+      <Show when={expanded() && text()}>
+        <div class="mt-1 pl-5 border-l-2 border-border/50 text-muted">
+          <MessageContent text={text()} />
+        </div>
+      </Show>
+    </div>
+  )
+}
+
 function MessagePart(props: {
   part: OcPart
   streamingContent: Record<string, string>
@@ -178,8 +229,105 @@ function MessagePart(props: {
           return <MessageContent text={text()} />
         }}
       </Match>
+      <Match when={props.part.type === 'reasoning' && props.part}>
+        {(part) => (
+          <ReasoningBlock
+            part={part() as OcReasoningPart}
+            streamingContent={props.streamingContent}
+          />
+        )}
+      </Match>
       <Match when={props.part.type === 'tool' && props.part}>
         {(part) => <ToolCard part={part() as OcToolPart} />}
+      </Match>
+    </Switch>
+  )
+}
+
+function MessageError(props: { error: OcMessageError }): JSX.Element {
+  return (
+    <Switch
+      fallback={
+        <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <XCircle size={12} class="text-error flex-shrink-0" />
+            <span class="text-error font-semibold">{props.error.name}</span>
+          </div>
+          <p class="text-error/80 text-[11px] mt-1 leading-relaxed">{props.error.message}</p>
+        </div>
+      }
+    >
+      <Match when={props.error.name === 'MessageAbortedError'}>
+        <span class="text-muted text-[11px] italic select-none">Generation stopped</span>
+      </Match>
+
+      <Match when={props.error.name === 'ProviderAuthError'}>
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <KeyRound size={12} class="text-warning flex-shrink-0" />
+            <span class="text-warning font-semibold">Authentication failed</span>
+          </div>
+          <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
+            {props.error.providerID
+              ? `Could not authenticate with provider "${props.error.providerID}". Check your API key.`
+              : props.error.message}
+          </p>
+        </div>
+      </Match>
+
+      <Match when={props.error.name === 'ContextOverflowError'}>
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <AlertTriangle size={12} class="text-warning flex-shrink-0" />
+            <span class="text-warning font-semibold">Context limit reached</span>
+          </div>
+          <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
+            The conversation is too long for the model's context window. Try starting a new session
+            or compacting this one.
+          </p>
+        </div>
+      </Match>
+
+      <Match when={props.error.name === 'MessageOutputLengthError'}>
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <AlertTriangle size={12} class="text-warning flex-shrink-0" />
+            <span class="text-warning font-semibold">Output truncated</span>
+          </div>
+          <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
+            The response exceeded the maximum output length and was cut short.
+          </p>
+        </div>
+      </Match>
+
+      <Match when={props.error.name === 'StructuredOutputError'}>
+        <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <XCircle size={12} class="text-error flex-shrink-0" />
+            <span class="text-error font-semibold">Output parsing failed</span>
+          </div>
+          <p class="text-error/80 text-[11px] mt-1 leading-relaxed">
+            {props.error.message}
+            <Show when={props.error.retries}>
+              {' '}
+              ({props.error.retries} {props.error.retries === 1 ? 'retry' : 'retries'} attempted)
+            </Show>
+          </p>
+        </div>
+      </Match>
+
+      <Match when={props.error.name === 'APIError' && props.error.isRetryable}>
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+          <div class="flex items-center gap-1.5">
+            <AlertTriangle size={12} class="text-warning flex-shrink-0" />
+            <span class="text-warning font-semibold">
+              API error{props.error.statusCode ? ` (${props.error.statusCode})` : ''}
+            </span>
+          </div>
+          <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
+            {props.error.message} — this error is retryable, try sending your message again.
+          </p>
+        </div>
       </Match>
     </Switch>
   )
@@ -271,19 +419,14 @@ export default function MessageList(props: MessageListProps): JSX.Element {
                     )}
                   </For>
                   <Show when={!msg.error && msg.parts.length === 0}>
-                    <span class="text-muted text-[11px] italic">...</span>
+                    <span class="text-muted text-[11px] italic flex items-center gap-1.5">
+                      <Show when={msg.role === 'assistant'} fallback={<span>...</span>}>
+                        <Loader2 size={11} class="animate-spin" />
+                        Thinking...
+                      </Show>
+                    </span>
                   </Show>
-                  <Show when={msg.error}>
-                    <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
-                      <div class="flex items-center gap-1.5">
-                        <XCircle size={12} class="text-error flex-shrink-0" />
-                        <span class="text-error font-semibold">{msg.error?.name}</span>
-                      </div>
-                      <p class="text-error/80 text-[11px] mt-1 leading-relaxed">
-                        {msg.error?.message}
-                      </p>
-                    </div>
-                  </Show>
+                  <Show when={msg.error}>{(error) => <MessageError error={error()} />}</Show>
                 </div>
               </div>
             </>
