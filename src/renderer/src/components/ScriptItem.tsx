@@ -3,7 +3,6 @@ import { createSignal, type JSX, Match, Show, Switch } from 'solid-js'
 import { getLastLine } from '../outputStore'
 import { runScript, stopScript } from '../scriptActions'
 import type { Project, Tab } from '../types'
-import SidebarIconButton from './SidebarIconButton'
 
 interface ScriptItemProps {
   project: Project
@@ -42,18 +41,32 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      class="flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
+      class="flex items-baseline py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
       style={{ 'padding-left': `${props.indent}px` }}
       classList={{ 'bg-active': props.isActive }}
     >
-      <Scroll size={11} class="flex-shrink-0 mr-[5px] text-content/70" />
+      <Switch>
+        <Match when={props.status === 'running'}>
+          <Loader2
+            size={11}
+            class="flex-shrink-0 mr-[5px] text-status-running animate-spin self-center"
+          />
+        </Match>
+        <Match when={props.status === 'success'}>
+          <Heart size={11} class="flex-shrink-0 mr-[5px] text-status-success self-center" />
+        </Match>
+        <Match when={props.status === 'error'}>
+          <HeartCrack size={11} class="flex-shrink-0 mr-[5px] text-status-error self-center" />
+        </Match>
+        <Match when={props.status === 'idle'}>
+          <Scroll size={11} class="flex-shrink-0 mr-[5px] text-icon-script self-center" />
+        </Match>
+      </Switch>
       <span class="truncate flex-shrink-0">{props.scriptName}</span>
-      <Show when={props.status === 'running'}>
-        <Show when={props.tab}>
-          <span class="text-[10px] text-muted opacity-70 truncate ml-1 font-mono flex-1 min-w-0">
-            {props.tab && getLastLine(props.tab.tabId)}
-          </span>
-        </Show>
+      <Show when={props.status === 'running' && props.tab}>
+        <span class="text-[10px] text-muted opacity-70 truncate ml-1 font-mono flex-1 min-w-0">
+          {props.tab && getLastLine(props.tab.tabId)}
+        </span>
       </Show>
       <Show when={props.status !== 'running'}>
         <span class="flex-1" />
@@ -61,48 +74,46 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
 
       <Switch>
         <Match when={props.status === 'idle'}>
-          <SidebarIconButton
-            icon={<Play size={11} />}
-            title="Run"
-            onClick={handleRun}
-            visible={hovered()}
-          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRun()
+            }}
+            class="flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
+            classList={{ invisible: !hovered() }}
+          >
+            <Play size={9} />
+            Run
+          </button>
         </Match>
         <Match when={props.status === 'running'}>
-          <Show
-            when={hovered()}
-            fallback={
-              <span class="flex-shrink-0 p-1 flex items-center text-status-running">
-                <Loader2 size={11} class="animate-spin" />
-              </span>
-            }
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleStop()
+            }}
+            class="flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
+            classList={{ invisible: !hovered() }}
           >
-            <SidebarIconButton icon={<Square size={11} />} title="Stop" onClick={handleStop} />
-          </Show>
+            <Square size={9} />
+            Stop
+          </button>
         </Match>
-        <Match when={props.status === 'success'}>
-          <Show
-            when={hovered()}
-            fallback={
-              <span class="flex-shrink-0 p-1 flex items-center text-status-success">
-                <Heart size={11} />
-              </span>
-            }
+        <Match when={props.status === 'success' || props.status === 'error'}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleRun()
+            }}
+            class="flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
+            classList={{ invisible: !hovered() }}
           >
-            <SidebarIconButton icon={<RotateCcw size={11} />} title="Rerun" onClick={handleRun} />
-          </Show>
-        </Match>
-        <Match when={props.status === 'error'}>
-          <Show
-            when={hovered()}
-            fallback={
-              <span class="flex-shrink-0 p-1 flex items-center text-status-error">
-                <HeartCrack size={11} />
-              </span>
-            }
-          >
-            <SidebarIconButton icon={<RotateCcw size={11} />} title="Rerun" onClick={handleRun} />
-          </Show>
+            <RotateCcw size={9} />
+            Rerun
+          </button>
         </Match>
       </Switch>
     </div>

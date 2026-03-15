@@ -1,8 +1,7 @@
-import { ChevronDown, Plus, Sparkles, SquareTerminal, X } from 'lucide-solid'
-import { createSignal, For, type JSX, Show } from 'solid-js'
+import { CircleDot, Loader2, Plus, Sparkles, SquareTerminal, X } from 'lucide-solid'
+import { For, type JSX, Match, Show, Switch } from 'solid-js'
 import type { OpencodeInstance, PersistentTerminal, Project, Tab } from '../types'
 import ScriptItem from './ScriptItem'
-import SidebarIconButton from './SidebarIconButton'
 
 export interface ScriptsAndTerminalsProps {
   project: Project
@@ -29,11 +28,12 @@ export interface ScriptsAndTerminalsProps {
   onOpenOpencodeInstance: (project: Project, instance: OpencodeInstance) => void
   onRemoveOpencodeInstance: (project: Project, instanceId: string) => void
   isOcInstanceActive: (instanceId: string) => boolean
+  getOcSessionId: (instanceId: string) => string | undefined
+  isOcGenerating: (sessionId: string) => boolean
+  ocNeedsAttention: (sessionId: string) => boolean
 }
 
 export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JSX.Element {
-  const [dropdownOpen, setDropdownOpen] = createSignal(false)
-
   const visibleScripts = (): string[] =>
     Object.keys(props.scripts).filter((s) => !(props.project.hiddenScripts ?? []).includes(s))
 
@@ -68,23 +68,6 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
         </For>
       </Show>
 
-      {/* Terminal placeholder — lazily created */}
-      <Show when={terminalsForCwd().length === 0}>
-        <div
-          role="menuitem"
-          tabIndex={0}
-          class="flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
-          style={{ 'padding-left': `${props.indent}px` }}
-          onClick={() => props.onCreateTerminal(props.worktreePath)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') props.onCreateTerminal(props.worktreePath)
-          }}
-        >
-          <SquareTerminal size={11} class="flex-shrink-0 mr-[5px] text-content/70" />
-          <span class="truncate">Terminal</span>
-        </div>
-      </Show>
-
       <For each={terminalsForCwd()}>
         {(pt) => (
           <div
@@ -92,7 +75,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
             style={{ 'padding-left': `${props.indent}px` }}
             classList={{ 'bg-active': props.isPtActive(pt.id) }}
           >
-            <SquareTerminal size={11} class="flex-shrink-0 mr-[5px] text-content/70" />
+            <SquareTerminal size={11} class="flex-shrink-0 mr-[5px] text-icon-terminal" />
             <span
               role="menuitem"
               tabIndex={0}
@@ -123,96 +106,108 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
                 />
               </Show>
             </span>
-            <span class="invisible group-hover/pt:visible">
-              <SidebarIconButton
-                icon={<X size={11} />}
-                title="Remove terminal"
-                onClick={() => props.onRemoveTerminal(props.project, pt.id)}
-              />
-            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                props.onRemoveTerminal(props.project, pt.id)
+              }}
+              class="invisible group-hover/pt:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
+              title="Remove terminal"
+            >
+              <X size={9} />
+              Close
+            </button>
           </div>
         )}
       </For>
 
       {/* AI chat instances */}
       <For each={opencodeForCwd()}>
-        {(oc) => (
-          <div
-            class="group/ai flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
-            style={{ 'padding-left': `${props.indent}px` }}
-            classList={{ 'bg-active': props.isOcInstanceActive(oc.id) }}
-          >
-            <Sparkles size={11} class="flex-shrink-0 mr-[5px] text-content/70" />
-            <span
-              role="menuitem"
-              tabIndex={0}
-              class="flex-1 min-w-0 truncate"
-              onClick={() => props.onOpenOpencodeInstance(props.project, oc)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ')
-                  props.onOpenOpencodeInstance(props.project, oc)
-              }}
-            >
-              {oc.label}
-            </span>
-            <span class="invisible group-hover/ai:visible">
-              <SidebarIconButton
-                icon={<X size={11} />}
-                title="Remove AI chat"
-                onClick={() => props.onRemoveOpencodeInstance(props.project, oc.id)}
-              />
-            </span>
-          </div>
-        )}
-      </For>
+        {(oc) => {
+          const sessionId = () => props.getOcSessionId(oc.id)
+          const generating = () => {
+            const sid = sessionId()
+            return sid ? props.isOcGenerating(sid) : false
+          }
+          const needsAttention = () => {
+            const sid = sessionId()
+            return sid ? props.ocNeedsAttention(sid) : false
+          }
 
-      {/* Split button: new terminal + dropdown */}
-      <div class="flex items-center mb-1.5" style={{ 'padding-left': `${props.indent}px` }}>
-        <div
-          role="menuitem"
-          tabIndex={0}
-          onClick={() => props.onCreateTerminal(props.worktreePath)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') props.onCreateTerminal(props.worktreePath)
-          }}
-          class="flex items-center gap-1 py-[3px] text-content/70 text-[11px] cursor-pointer hover:text-accent"
-        >
-          <Plus size={10} />
-          new terminal
-        </div>
-        <div class="relative ml-0.5">
-          <button
-            type="button"
-            onClick={() => setDropdownOpen((v) => !v)}
-            class="bg-transparent border-none text-content/70 hover:text-accent cursor-pointer p-0.5 rounded transition-colors flex items-center"
-            title="More options"
-          >
-            <ChevronDown size={10} />
-          </button>
-          <Show when={dropdownOpen()}>
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: click-outside backdrop */}
+          return (
             <div
-              class="fixed inset-0 z-40"
-              onClick={() => setDropdownOpen(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setDropdownOpen(false)
-              }}
-            />
-            <div class="absolute left-0 top-full mt-0.5 z-50 bg-sidebar border border-border rounded shadow-lg py-1 min-w-[120px]">
+              class="group/ai flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
+              style={{ 'padding-left': `${props.indent}px` }}
+              classList={{ 'bg-active': props.isOcInstanceActive(oc.id) }}
+            >
+              <Switch>
+                <Match when={needsAttention()}>
+                  <CircleDot
+                    size={11}
+                    class="flex-shrink-0 mr-[5px] text-accent animate-pulse-attention"
+                  />
+                </Match>
+                <Match when={generating()}>
+                  <Loader2
+                    size={11}
+                    class="flex-shrink-0 mr-[5px] text-status-running animate-spin"
+                  />
+                </Match>
+                <Match when={!needsAttention() && !generating()}>
+                  <Sparkles size={11} class="flex-shrink-0 mr-[5px] text-icon-ai" />
+                </Match>
+              </Switch>
+              <span
+                role="menuitem"
+                tabIndex={0}
+                class="flex-1 min-w-0 truncate"
+                onClick={() => props.onOpenOpencodeInstance(props.project, oc)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ')
+                    props.onOpenOpencodeInstance(props.project, oc)
+                }}
+              >
+                {oc.label}
+              </span>
               <button
                 type="button"
-                onClick={() => {
-                  setDropdownOpen(false)
-                  props.onCreateOpencodeInstance(props.worktreePath)
+                onClick={(e) => {
+                  e.stopPropagation()
+                  props.onRemoveOpencodeInstance(props.project, oc.id)
                 }}
-                class="w-full flex items-center gap-1.5 px-2.5 py-1 bg-transparent border-none text-content text-[11px] cursor-pointer hover:bg-hover text-left"
+                class="invisible group-hover/ai:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
+                title="Remove AI chat"
               >
-                <Sparkles size={10} class="text-content/70" />
-                new opencode
+                <X size={9} />
+                Close
               </button>
             </div>
-          </Show>
-        </div>
+          )
+        }}
+      </For>
+
+      {/* New terminal / new AI chat buttons */}
+      <div
+        class="flex flex-wrap items-center gap-1.5 mt-1 mb-1.5 pr-2"
+        style={{ 'padding-left': `${props.indent}px` }}
+      >
+        <button
+          type="button"
+          onClick={() => props.onCreateTerminal(props.worktreePath)}
+          class="flex items-center gap-1 py-0.5 px-1.5 text-icon-terminal text-[11px] cursor-pointer hover:bg-icon-terminal/10 bg-transparent border border-icon-terminal/30 rounded transition-colors"
+        >
+          <Plus size={9} />
+          terminal
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onCreateOpencodeInstance(props.worktreePath)}
+          class="flex items-center gap-1 py-0.5 px-1.5 text-icon-ai text-[11px] cursor-pointer hover:bg-icon-ai/10 bg-transparent border border-icon-ai/30 rounded transition-colors"
+        >
+          <Plus size={9} />
+          ai chat
+        </button>
       </div>
     </>
   )

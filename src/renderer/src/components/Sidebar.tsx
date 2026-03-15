@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, FolderPlus, Plus, RefreshCw, Settings, X } f
 import { createEffect, For, type JSX, onMount, Show } from 'solid-js'
 import type { SetStoreFunction } from 'solid-js/store'
 import { createStore } from 'solid-js/store'
-import { createSession, startServer } from '../opencodeStore'
+import { opencodeState, startServer } from '../opencodeStore'
 import { runScript } from '../scriptActions'
 import type {
   AppState,
@@ -310,9 +310,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     const started = await startServer(cwd)
     if (!started) return
 
-    const session = await createSession(cwd)
-    if (!session) return
-
     const instancesForCwd = (project.opencodeInstances ?? []).filter(
       (i) => (i.worktreePath || project.path) === cwd
     )
@@ -321,7 +318,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
 
     const instance: OpencodeInstance = {
       id: crypto.randomUUID(),
-      sessionId: session.id,
       label,
       worktreePath
     }
@@ -430,7 +426,15 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       onCreateOpencodeInstance: (wtp) => createOpencodeInstance(project, wtp),
       onOpenOpencodeInstance: openOpencodeInstance,
       onRemoveOpencodeInstance: removeOpencodeInstance,
-      isOcInstanceActive
+      isOcInstanceActive,
+      getOcSessionId: (instanceId) => {
+        const inst = (project.opencodeInstances ?? []).find((i) => i.id === instanceId)
+        return inst?.sessionId
+      },
+      isOcGenerating: (sessionId) => opencodeState.isGenerating[sessionId] ?? false,
+      ocNeedsAttention: (sessionId) =>
+        (opencodeState.pendingPermissions[sessionId]?.length ?? 0) > 0 ||
+        (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0
     }
   }
 
@@ -455,9 +459,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
 
         <For each={props.store.projects}>
           {(project) => (
-            <div class="border-b border-border last:border-b-0">
+            <div>
               {/* Project header */}
-              <div class="group flex items-center gap-1 px-2 py-1.5 cursor-pointer hover:bg-hover">
+              <div class="group flex items-center gap-1 px-2 h-9 border-b border-border cursor-pointer hover:bg-hover">
                 <span
                   role="menuitem"
                   tabIndex={0}
@@ -471,13 +475,34 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
                   <span class="text-muted flex-shrink-0 flex items-center">
                     {project.collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
                   </span>
-                  <span class="text-heading font-semibold text-[13px] truncate">
+                  <span
+                    class="font-medium text-[12px] truncate"
+                    classList={{
+                      'text-content': !project.collapsed,
+                      'text-muted': project.collapsed
+                    }}
+                  >
                     {project.name}
                   </span>
-                  <span class="text-[9px] text-muted border border-border px-1 rounded font-mono flex-shrink-0 leading-[14px]">
-                    {project.projectType}
-                  </span>
+                  <Show when={project.projectType !== 'unknown'}>
+                    <span class="text-[9px] text-muted border border-border px-1 rounded font-mono flex-shrink-0 leading-[14px]">
+                      {project.projectType}
+                    </span>
+                  </Show>
                 </span>
+                <Show when={isGit(project.id)}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setState('createWorktreeProjectId', project.id)
+                    }}
+                    class="invisible group-hover:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
+                    title="New worktree"
+                  >
+                    <Plus size={11} />
+                  </button>
+                </Show>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -504,106 +529,103 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
 
               {/* Expanded content */}
               <Show when={!project.collapsed}>
-                <Show
-                  when={isGit(project.id)}
-                  fallback={
-                    <ScriptsAndTerminals
-                      {...scriptsAndTerminalsProps(project, project.scripts, project.path, 12)}
-                    />
-                  }
-                >
-                  {/* Git project: show worktrees */}
-                  <For each={state.worktrees[project.id] ?? []}>
-                    {(wt) => {
-                      const wtScripts = (): Record<string, string> =>
-                        state.worktreeScripts[wt.path] ?? {}
-                      const isExpanded = (): boolean =>
-                        project.expandedWorktrees?.[wt.path] ?? false
+                <div class="border-b border-border">
+                  <Show
+                    when={isGit(project.id)}
+                    fallback={
+                      <ScriptsAndTerminals
+                        {...scriptsAndTerminalsProps(project, project.scripts, project.path, 24)}
+                      />
+                    }
+                  >
+                    {/* Git project: show worktrees */}
+                    <For each={state.worktrees[project.id] ?? []}>
+                      {(wt) => {
+                        const wtScripts = (): Record<string, string> =>
+                          state.worktreeScripts[wt.path] ?? {}
+                        const isExpanded = (): boolean =>
+                          project.expandedWorktrees?.[wt.path] ?? false
 
-                      return (
-                        <div>
-                          {/* Worktree header */}
-                          <div class="group/wt flex items-center gap-1 py-[3px] px-2 pl-4 cursor-pointer hover:bg-hover">
-                            <span
-                              role="menuitem"
-                              tabIndex={0}
-                              class="flex-1 flex items-center gap-1.5 min-w-0"
-                              onClick={() => toggleWorktreeExpanded(project.id, wt.path)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ')
-                                  toggleWorktreeExpanded(project.id, wt.path)
-                              }}
-                              title={wt.path}
-                            >
-                              <span class="text-muted flex-shrink-0 flex items-center">
-                                {isExpanded() ? (
-                                  <ChevronDown size={10} />
-                                ) : (
-                                  <ChevronRight size={10} />
-                                )}
+                        return (
+                          <div>
+                            {/* Worktree header */}
+                            <div class="group/wt flex items-center gap-1 py-[3px] px-2 pl-4 cursor-pointer hover:bg-hover">
+                              <span
+                                role="menuitem"
+                                tabIndex={0}
+                                class="flex-1 flex items-center gap-1.5 min-w-0"
+                                onClick={() => toggleWorktreeExpanded(project.id, wt.path)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ')
+                                    toggleWorktreeExpanded(project.id, wt.path)
+                                }}
+                                title={wt.path}
+                              >
+                                <span class="text-muted flex-shrink-0 flex items-center">
+                                  {isExpanded() ? (
+                                    <ChevronDown size={10} />
+                                  ) : (
+                                    <ChevronRight size={10} />
+                                  )}
+                                </span>
+                                <span
+                                  class="text-[12px] truncate"
+                                  classList={{
+                                    'text-content': isExpanded(),
+                                    'text-muted': !isExpanded()
+                                  }}
+                                >
+                                  {wt.branch}
+                                </span>
+                                <Show when={wt.isMain}>
+                                  <span class="text-[10px] flex-shrink-0 text-status-running">
+                                    ★
+                                  </span>
+                                </Show>
                               </span>
-                              <span class="text-content text-[12px] truncate">{wt.branch}</span>
-                              <Show when={wt.isMain}>
-                                <span class="text-[10px] flex-shrink-0 text-status-running">★</span>
+                              <Show when={!wt.isMain}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    syncWorktreeFiles(project, wt)
+                                  }}
+                                  class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
+                                  title="Sync configured files"
+                                >
+                                  <RefreshCw size={10} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    removeWorktree(project, wt)
+                                  }}
+                                  class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
+                                  title="Remove worktree"
+                                >
+                                  <X size={10} />
+                                </button>
                               </Show>
-                            </span>
-                            <Show when={!wt.isMain}>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  syncWorktreeFiles(project, wt)
-                                }}
-                                class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                                title="Sync configured files"
-                              >
-                                <RefreshCw size={10} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  removeWorktree(project, wt)
-                                }}
-                                class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                                title="Remove worktree"
-                              >
-                                <X size={10} />
-                              </button>
+                            </div>
+
+                            <Show when={isExpanded()}>
+                              <ScriptsAndTerminals
+                                {...scriptsAndTerminalsProps(
+                                  project,
+                                  wtScripts(),
+                                  wt.path,
+                                  24,
+                                  wt.path
+                                )}
+                              />
                             </Show>
                           </div>
-
-                          <Show when={isExpanded()}>
-                            <ScriptsAndTerminals
-                              {...scriptsAndTerminalsProps(
-                                project,
-                                wtScripts(),
-                                wt.path,
-                                24,
-                                wt.path
-                              )}
-                            />
-                          </Show>
-                        </div>
-                      )
-                    }}
-                  </For>
-
-                  {/* Add worktree */}
-                  <div
-                    role="menuitem"
-                    tabIndex={0}
-                    onClick={() => setState('createWorktreeProjectId', project.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ')
-                        setState('createWorktreeProjectId', project.id)
-                    }}
-                    class="flex items-center gap-1 py-[3px] px-2 pl-4 mb-1.5 text-content/70 text-[11px] cursor-pointer hover:text-accent"
-                  >
-                    <Plus size={10} />
-                    new worktree
-                  </div>
-                </Show>
+                        )
+                      }}
+                    </For>
+                  </Show>
+                </div>
               </Show>
             </div>
           )}

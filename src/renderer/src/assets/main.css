@@ -9,6 +9,7 @@
   --color-accent:   #f48cb2;   /* primary pink, running status */
   --color-input:    #f5a0c8;   /* input border */
   --color-error:    #d95f5f;   /* error / failed status */
+  --color-warning:  #c4964e;   /* warning / caution status */
   --color-success:  #9b7cc9;   /* success status */
   --color-heading:  #c9709a;   /* project name headings */
   --color-muted:    #c49ab8;   /* secondary/muted text */
@@ -19,6 +20,9 @@
   --color-status-error:   #d95f5f;
   --color-status-stop:    #e06060;
   --color-status-action:  #d96a94;
+  --color-icon-script:    #c49666;
+  --color-icon-terminal:  #7ba4c4;
+  --color-icon-ai:        #b07cc9;
 }
 
 .markdown {
@@ -138,6 +142,15 @@
   overflow-x: auto;
   font-size: 12px;
   line-height: 1.625;
+}
+
+@keyframes pulse-attention {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-attention {
+  animation: pulse-attention 2s infinite ease-in-out;
 }
 
 @keyframes pulse-dot {
