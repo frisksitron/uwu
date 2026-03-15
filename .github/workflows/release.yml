@@ -6,8 +6,41 @@ on:
       - 'v*'
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  # build-windows:
+  #   runs-on: windows-latest
+  #   permissions:
+  #     contents: write
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #
+  #     - uses: pnpm/action-setup@v4
+  #       with:
+  #         version: 10
+  #
+  #     - uses: actions/setup-node@v6
+  #       with:
+  #         node-version: 24
+  #         cache: pnpm
+  #
+  #     - name: Install dependencies
+  #       run: pnpm install
+  #
+  #     - name: Lint
+  #       run: pnpm check
+  #
+  #     - name: Set version from tag
+  #       shell: bash
+  #       run: |
+  #         VERSION="${GITHUB_REF_NAME#v}"
+  #         pnpm version "$VERSION" --no-git-tag-version --allow-same-version
+  #
+  #     - name: Build and publish
+  #       run: pnpm run build && pnpm exec electron-builder --win --publish always
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-mac:
+    runs-on: macos-latest
     permissions:
       contents: write
     steps:
@@ -35,19 +68,6 @@ jobs:
           pnpm version "$VERSION" --no-git-tag-version --allow-same-version
 
       - name: Build and publish
-        run: pnpm run build && pnpm exec electron-builder --win --publish always
+        run: pnpm run build && pnpm exec electron-builder --mac --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate release notes
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
-          ARGS=(-f tag_name="$GITHUB_REF_NAME")
-          if [ -n "$PREV_TAG" ]; then
-            ARGS+=(-f previous_tag_name="$PREV_TAG")
-          fi
-          NOTES=$(gh api repos/{owner}/{repo}/releases/generate-notes "${ARGS[@]}" --jq .body)
-          gh release edit "$GITHUB_REF_NAME" --notes "$NOTES"
