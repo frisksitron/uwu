@@ -155,6 +155,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
         >
         model?: { providerID: string; modelID: string }
         agent?: string
+        variant?: string
       }
     ) => {
       const client = getClient(projectPath)
@@ -162,7 +163,8 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
         sessionID: sessionId,
         parts: payload.parts,
         model: payload.model,
-        agent: payload.agent
+        agent: payload.agent,
+        variant: payload.variant
       })
     }
   )
@@ -218,6 +220,36 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
     const result = await client.app.agents()
     return result.data
   })
+
+  ipcMain.handle('opencode:commands', async (_event, projectPath: string) => {
+    const client = getClient(projectPath)
+    const result = await client.command.list()
+    return result.data
+  })
+
+  ipcMain.handle(
+    'opencode:session-command',
+    async (
+      _event,
+      projectPath: string,
+      sessionId: string,
+      command: string,
+      args: string,
+      model?: string,
+      agent?: string,
+      variant?: string
+    ) => {
+      const client = getClient(projectPath)
+      await client.session.command({
+        sessionID: sessionId,
+        command,
+        arguments: args,
+        model,
+        agent,
+        variant
+      })
+    }
+  )
 }
 
 function getClient(projectPath: string): OpencodeClient {

@@ -385,7 +385,11 @@ export default function MessageList(props: MessageListProps): JSX.Element {
           }
 
           const isLastAssistant = () => msg === lastAssistantMsg()
-          const grouped = () => groupParts(msg.parts)
+          const visibleParts = () => {
+            if (msg.role !== 'user') return msg.parts
+            return msg.parts.filter((p) => !(p.type === 'text' && (p as OcTextPart).synthetic))
+          }
+          const grouped = () => groupParts(visibleParts())
 
           return (
             <>
@@ -451,7 +455,7 @@ export default function MessageList(props: MessageListProps): JSX.Element {
                       </Show>
                     )}
                   </For>
-                  <Show when={!msg.error && msg.parts.length === 0}>
+                  <Show when={!msg.error && visibleParts().length === 0}>
                     <span class="text-muted text-[11px] italic flex items-center gap-1.5">
                       <Show when={msg.role === 'assistant'} fallback={<span>...</span>}>
                         <Loader2 size={11} class="animate-spin" />

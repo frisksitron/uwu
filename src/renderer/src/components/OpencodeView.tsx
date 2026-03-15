@@ -3,9 +3,12 @@ import { createEffect, createSignal, type JSX, onCleanup, onMount, Show } from '
 import {
   abortGeneration,
   createSession,
+  executeCommand,
+  getSlashCommands,
   type ImageAttachment,
   loadMessages,
   loadSessions,
+  loadSlashCommands,
   opencodeState,
   rejectQuestion,
   respondPermission,
@@ -13,10 +16,8 @@ import {
   sendMessage,
   startServer
 } from '../opencodeStore'
-import AgentSelector from './opencode/AgentSelector'
 import ChatInput from './opencode/ChatInput'
 import MessageList from './opencode/MessageList'
-import ModelSelector from './opencode/ModelSelector'
 import RawEventLog from './opencode/RawEventLog'
 import SessionPicker from './opencode/SessionPicker'
 
@@ -35,12 +36,16 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     { providerID: string; modelID: string } | undefined
   >()
   const [agentOverride, setAgentOverride] = createSignal<string | undefined>()
+  const [variantOverride, setVariantOverride] = createSignal<string | undefined>()
 
   // Resolved values: local override > server's last-used value (from user messages)
   const model = () =>
     modelOverride() ?? (props.sessionId ? opencodeState.sessionModels[props.sessionId] : undefined)
   const agent = () =>
     agentOverride() ?? (props.sessionId ? opencodeState.sessionAgents[props.sessionId] : undefined)
+  const variant = () =>
+    variantOverride() ??
+    (props.sessionId ? opencodeState.sessionVariants[props.sessionId] : undefined)
 
   const [showRaw, setShowRaw] = createSignal(false)
   const [showHistory, setShowHistory] = createSignal(false)
@@ -52,7 +57,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
   onMount(async () => {
     await startServer(props.projectPath)
-    await loadSessions(props.projectPath)
+    await Promise.all([loadSessions(props.projectPath), loadSlashCommands(props.projectPath)])
     if (props.sessionId) {
       await loadMessages(props.projectPath, props.sessionId)
       requestAnimationFrame(() => scrollToBottom())
@@ -143,7 +148,27 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
       sessionId = newSession.id
       props.onSessionChange(sessionId)
     }
-    await sendMessage(props.projectPath, sessionId, text, model(), agent(), images)
+
+    // Parse slash commands: /command args
+    if (text.startsWith('/')) {
+      const spaceIdx = text.indexOf(' ')
+      const command = spaceIdx === -1 ? text.slice(1) : text.slice(1, spaceIdx)
+      const args = spaceIdx === -1 ? '' : text.slice(spaceIdx + 1).trim()
+      if (command) {
+        await executeCommand(
+          props.projectPath,
+          sessionId,
+          command,
+          args,
+          model(),
+          agent(),
+          variant()
+        )
+        return
+      }
+    }
+
+    await sendMessage(props.projectPath, sessionId, text, model(), agent(), images, variant())
   }
 
   async function handleAbort(): Promise<void> {
@@ -173,6 +198,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   async function handleNewSession(): Promise<void> {
     setModelOverride(undefined)
     setAgentOverride(undefined)
+    setVariantOverride(undefined)
     const newSession = await createSession(props.projectPath)
     if (newSession) {
       props.onSessionChange(newSession.id)
@@ -183,6 +209,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     setShowHistory(false)
     setModelOverride(undefined)
     setAgentOverride(undefined)
+    setVariantOverride(undefined)
     props.onSessionChange(sessionId)
     await loadMessages(props.projectPath, sessionId)
     setLockedToBottom(true)
@@ -202,40 +229,30 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
         <span class="flex-1 text-[12px] text-content truncate font-medium">
           {session()?.title || 'AI Chat'}
         </span>
-        <AgentSelector
-          projectPath={props.projectPath}
-          value={agent()}
-          onChange={setAgentOverride}
-        />
-        <ModelSelector
-          projectPath={props.projectPath}
-          value={model()}
-          onChange={setModelOverride}
-        />
         <button
           type="button"
           onClick={() => setShowRaw((v) => !v)}
-          class="bg-transparent hover:bg-hover border-none cursor-pointer p-1 rounded transition-colors flex items-center"
+          class="bg-transparent hover:bg-hover border-none cursor-pointer h-7 w-7 rounded transition-colors flex items-center justify-center"
           classList={{
             'text-accent': showRaw(),
-            'text-content/60 hover:text-content': !showRaw()
+            'text-muted hover:text-content': !showRaw()
           }}
           title="Toggle raw event log"
         >
-          <Bug size={13} />
+          <Bug size={14} />
         </button>
         <div class="relative">
           <button
             type="button"
             onClick={() => setShowHistory((v) => !v)}
-            class="bg-transparent hover:bg-hover border-none cursor-pointer p-1 rounded transition-colors flex items-center"
+            class="bg-transparent hover:bg-hover border-none cursor-pointer h-7 w-7 rounded transition-colors flex items-center justify-center"
             classList={{
               'text-accent': showHistory(),
-              'text-content/60 hover:text-content': !showHistory()
+              'text-muted hover:text-content': !showHistory()
             }}
             title="Session history"
           >
-            <History size={13} />
+            <History size={14} />
           </button>
           <Show when={showHistory()}>
             {/* biome-ignore lint/a11y/noStaticElementInteractions: click-outside backdrop */}
@@ -258,10 +275,10 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
         <button
           type="button"
           onClick={handleNewSession}
-          class="bg-transparent hover:bg-hover border-none cursor-pointer p-1 rounded transition-colors flex items-center text-content/60 hover:text-content"
+          class="bg-transparent hover:bg-hover border-none cursor-pointer h-7 w-7 rounded transition-colors flex items-center justify-center text-muted hover:text-content"
           title="New session"
         >
-          <Plus size={13} />
+          <Plus size={14} />
         </button>
       </div>
 
@@ -345,8 +362,17 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
         isGenerating={isGenerating()}
         generationStartTime={generationStartTime()}
         history={inputHistory()}
+        slashCommands={getSlashCommands(props.projectPath)}
         onSend={handleSend}
         onAbort={handleAbort}
+        visible={props.visible}
+        projectPath={props.projectPath}
+        model={model()}
+        onModelChange={setModelOverride}
+        agent={agent()}
+        onAgentChange={setAgentOverride}
+        variant={variant()}
+        onVariantChange={setVariantOverride}
       />
     </div>
   )

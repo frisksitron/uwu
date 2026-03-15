@@ -1,6 +1,10 @@
-import { ImagePlus, Send, Square, X } from 'lucide-solid'
+import { ArrowUp, ImagePlus, Square, X } from 'lucide-solid'
 import { createEffect, createSignal, For, type JSX, onCleanup, Show } from 'solid-js'
-import type { ImageAttachment } from '../../opencodeStore'
+import type { ImageAttachment, SlashCommand } from '../../opencodeStore'
+import AgentSelector from './AgentSelector'
+import ModelSelector from './ModelSelector'
+import SlashMenu from './SlashMenu'
+import VariantSelector from './VariantSelector'
 
 const MAX_IMAGES = 10
 const MAX_SIZE_BYTES = 20 * 1024 * 1024
@@ -9,8 +13,17 @@ interface ChatInputProps {
   isGenerating: boolean
   generationStartTime?: number
   history: string[]
+  slashCommands: SlashCommand[]
   onSend: (text: string, images: ImageAttachment[]) => void
   onAbort: () => void
+  visible: boolean
+  projectPath: string
+  model?: { providerID: string; modelID: string }
+  onModelChange: (model: { providerID: string; modelID: string } | undefined) => void
+  agent?: string
+  onAgentChange: (agent: string | undefined) => void
+  variant?: string
+  onVariantChange: (variant: string | undefined) => void
 }
 
 export default function ChatInput(props: ChatInputProps): JSX.Element {
@@ -19,9 +32,19 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
   const [dragOver, setDragOver] = createSignal(false)
   const [elapsed, setElapsed] = createSignal(0)
   const [historyIndex, setHistoryIndex] = createSignal(-1)
+  const [showSlashMenu, setShowSlashMenu] = createSignal(false)
+  const [slashFilter, setSlashFilter] = createSignal('')
   let savedDraft = ''
   let textareaRef: HTMLTextAreaElement | undefined
   let fileInputRef: HTMLInputElement | undefined
+  let slashMenuRef: { handleKeyDown: (e: KeyboardEvent) => boolean } | undefined
+
+  // Focus textarea when this tab becomes visible
+  createEffect(() => {
+    if (props.visible && textareaRef) {
+      textareaRef.focus()
+    }
+  })
 
   // Live elapsed counter during generation
   createEffect(() => {
@@ -118,7 +141,19 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
     input.value = ''
   }
 
+  function handleSlashSelect(command: string): void {
+    setTextAndResize(`/${command} `)
+    setShowSlashMenu(false)
+    textareaRef?.focus()
+  }
+
   function handleKeyDown(e: KeyboardEvent): void {
+    // Forward to slash menu when visible
+    if (showSlashMenu() && slashMenuRef) {
+      const handled = slashMenuRef.handleKeyDown(e)
+      if (handled) return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       submit()
@@ -171,15 +206,25 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
     setText('')
     setImages([])
     setHistoryIndex(-1)
+    setShowSlashMenu(false)
     savedDraft = ''
     if (textareaRef) textareaRef.style.height = 'auto'
   }
 
   function handleInput(e: InputEvent): void {
     const target = e.target as HTMLTextAreaElement
-    setText(target.value)
+    const value = target.value
+    setText(value)
     setHistoryIndex(-1)
     resizeTextarea()
+
+    // Slash menu logic: show when text starts with / and has no space yet (typing command name)
+    if (value.startsWith('/') && !value.includes(' ') && value.length > 0) {
+      setSlashFilter(value.slice(1))
+      setShowSlashMenu(true)
+    } else {
+      setShowSlashMenu(false)
+    }
   }
 
   const canSend = () => text().trim() || images().length > 0
@@ -218,6 +263,20 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
         </div>
       </Show>
 
+      <div class="relative">
+        <Show when={showSlashMenu() && props.slashCommands.length > 0}>
+          <SlashMenu
+            ref={(el) => {
+              slashMenuRef = el
+            }}
+            commands={props.slashCommands}
+            filter={slashFilter()}
+            onSelect={handleSlashSelect}
+            onClose={() => setShowSlashMenu(false)}
+          />
+        </Show>
+      </div>
+
       <div class="flex items-end gap-2">
         <input
           ref={fileInputRef}
@@ -253,10 +312,10 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
               type="button"
               onClick={submit}
               disabled={!canSend()}
-              class="bg-accent hover:bg-accent/80 disabled:opacity-30 text-white border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center disabled:cursor-default h-9"
+              class="bg-accent hover:bg-accent/80 disabled:opacity-30 text-white border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center disabled:cursor-default h-9 w-9"
               title="Send"
             >
-              <Send size={14} />
+              <ArrowUp size={14} />
             </button>
           }
         >
@@ -271,19 +330,33 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
         </Show>
       </div>
 
-      <div class="flex items-center gap-2 mt-1 px-1">
-        <Show
-          when={props.isGenerating}
-          fallback={
-            <span class="text-[10px] text-muted/80 select-none">
-              Enter to send &middot; Shift+Enter for new line &middot; &uarr;&darr; for history
-              &middot; Paste or drop images
+      <div class="flex items-center gap-2 mt-1 px-1 min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <AgentSelector
+            projectPath={props.projectPath}
+            value={props.agent}
+            onChange={props.onAgentChange}
+          />
+          <ModelSelector
+            projectPath={props.projectPath}
+            value={props.model}
+            onChange={props.onModelChange}
+          />
+          <VariantSelector
+            projectPath={props.projectPath}
+            model={props.model}
+            value={props.variant}
+            onChange={props.onVariantChange}
+          />
+        </div>
+        <div class="hidden sm:flex items-center gap-2 ml-auto min-w-0 overflow-hidden">
+          <Show when={props.isGenerating}>
+            <span class="pulse-dots text-accent text-[10px] flex-shrink-0" />
+            <span class="text-[10px] text-muted whitespace-nowrap">
+              Working for {elapsed()}s...
             </span>
-          }
-        >
-          <span class="pulse-dots text-accent text-[10px]" />
-          <span class="text-[10px] text-muted">Working for {elapsed()}s...</span>
-        </Show>
+          </Show>
+        </div>
       </div>
     </div>
   )

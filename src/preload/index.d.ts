@@ -91,6 +91,7 @@ interface OpencodeAPI {
       >
       model?: { providerID: string; modelID: string }
       agent?: string
+      variant?: string
     }
   ) => Promise<void>
   permissionRespond: (
@@ -108,6 +109,16 @@ interface OpencodeAPI {
   providers: (projectPath: string) => Promise<unknown>
   config: (projectPath: string) => Promise<unknown>
   agents: (projectPath: string) => Promise<unknown>
+  commands: (projectPath: string) => Promise<unknown>
+  sessionCommand: (
+    projectPath: string,
+    sessionId: string,
+    command: string,
+    args: string,
+    model?: string,
+    agent?: string,
+    variant?: string
+  ) => Promise<void>
   onEvent: (cb: (projectPath: string, event: unknown) => void) => () => void
 }
 

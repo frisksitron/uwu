@@ -12,6 +12,7 @@ export interface OcTextPart {
   messageID: string
   type: 'text'
   text: string
+  synthetic?: boolean
 }
 
 export interface OcPatchFileInfo {
@@ -121,6 +122,12 @@ export interface RawEvent {
   data: unknown
 }
 
+export interface SlashCommand {
+  name: string
+  description: string
+  source: 'command' | 'mcp' | 'skill'
+}
+
 interface OpencodeState {
   servers: Record<string, 'starting' | 'ready' | 'error' | 'stopped'>
   sessions: Record<string, OcSession[]>
@@ -134,7 +141,9 @@ interface OpencodeState {
   generationDurations: Record<string, number>
   sessionAgents: Record<string, string>
   sessionModels: Record<string, { providerID: string; modelID: string }>
+  sessionVariants: Record<string, string>
   rawEvents: RawEvent[]
+  slashCommands: Record<string, SlashCommand[]>
 }
 
 const MAX_RAW_EVENTS = 500
@@ -154,7 +163,9 @@ const [state, setState] = createStore<OpencodeState>({
   generationDurations: {},
   sessionAgents: {},
   sessionModels: {},
-  rawEvents: []
+  sessionVariants: {},
+  rawEvents: [],
+  slashCommands: {}
 })
 
 export { state as opencodeState }
@@ -245,6 +256,7 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
       time: { created: number }
       agent?: string
       model?: { providerID: string; modelID: string }
+      variant?: string
       error?: RawError
     }
     parts: Array<{
@@ -285,6 +297,9 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
   if (lastUser?.info.model) {
     setState('sessionModels', sessionId, lastUser.info.model)
   }
+  if (lastUser?.info.variant) {
+    setState('sessionVariants', sessionId, lastUser.info.variant)
+  }
 }
 
 interface RawPart {
@@ -292,6 +307,7 @@ interface RawPart {
   messageID: string
   type: string
   text?: string
+  synthetic?: boolean
   tool?: string
   state?: {
     status: string
@@ -311,7 +327,13 @@ function parseParts(raw: RawPart[]): OcPart[] {
   const parts: OcPart[] = []
   for (const p of raw) {
     if (p.type === 'text' && p.text !== undefined) {
-      parts.push({ id: p.id, messageID: p.messageID, type: 'text', text: p.text })
+      parts.push({
+        id: p.id,
+        messageID: p.messageID,
+        type: 'text',
+        text: p.text,
+        ...(p.synthetic && { synthetic: true })
+      })
     } else if (p.type === 'reasoning') {
       parts.push({
         id: p.id,
@@ -364,7 +386,8 @@ export async function sendMessage(
   text: string,
   model?: { providerID: string; modelID: string },
   agent?: string,
-  images?: ImageAttachment[]
+  images?: ImageAttachment[],
+  variant?: string
 ): Promise<void> {
   setState('isGenerating', sessionId, true)
   setState('generationStartTimes', sessionId, Date.now())
@@ -385,7 +408,8 @@ export async function sendMessage(
       parts,
       // Unwrap potential Solid store proxies — IPC structured clone can't serialize them
       model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
-      agent
+      agent,
+      variant
     })
   } catch (err) {
     console.error('[opencode] sendMessage failed:', err)
@@ -396,6 +420,61 @@ export async function sendMessage(
 export async function abortGeneration(projectPath: string, sessionId: string): Promise<void> {
   await window.opencodeAPI.sessionAbort(projectPath, sessionId)
   setState('isGenerating', sessionId, false)
+}
+
+export async function loadSlashCommands(projectPath: string): Promise<void> {
+  try {
+    const commands = (await window.opencodeAPI.commands(projectPath)) as Array<{
+      name: string
+      description?: string
+      source?: 'command' | 'mcp' | 'skill'
+    }> | null
+
+    const result: SlashCommand[] = []
+    if (commands) {
+      for (const c of commands) {
+        result.push({
+          name: c.name,
+          description: c.description || '',
+          source: c.source || 'command'
+        })
+      }
+    }
+    setState('slashCommands', projectPath, result)
+  } catch (err) {
+    console.error('[opencode] Failed to load slash commands:', err)
+  }
+}
+
+export function getSlashCommands(projectPath: string): SlashCommand[] {
+  return state.slashCommands[projectPath] || []
+}
+
+export async function executeCommand(
+  projectPath: string,
+  sessionId: string,
+  command: string,
+  args: string,
+  model?: { providerID: string; modelID: string },
+  agent?: string,
+  variant?: string
+): Promise<void> {
+  setState('isGenerating', sessionId, true)
+  setState('generationStartTimes', sessionId, Date.now())
+  try {
+    await window.opencodeAPI.sessionCommand(
+      projectPath,
+      sessionId,
+      command,
+      args,
+      model ? `${model.providerID}/${model.modelID}` : undefined,
+      agent,
+      variant
+    )
+  } catch (err) {
+    console.error('[opencode] executeCommand failed:', err)
+    setState('isGenerating', sessionId, false)
+  }
 }
 
 export async function respondPermission(
@@ -465,6 +544,7 @@ export function initEventListener(): () => void {
             messageID: string
             type: string
             text?: string
+            synthetic?: boolean
             tool?: string
             state?: {
               status: string
@@ -514,15 +594,17 @@ export function initEventListener(): () => void {
             time: { created: number }
             agent?: string
             model?: { providerID: string; modelID: string }
+            variant?: string
             error?: RawError
           }
         }
         const msg = props.info
 
-        // Track active agent/model from user messages
+        // Track active agent/model/variant from user messages
         if (msg.role === 'user') {
           if (msg.agent) setState('sessionAgents', msg.sessionID, msg.agent)
           if (msg.model) setState('sessionModels', msg.sessionID, msg.model)
+          if (msg.variant) setState('sessionVariants', msg.sessionID, msg.variant)
         }
         const error: OcMessageError | undefined = msg.error ? parseError(msg.error) : undefined
 
