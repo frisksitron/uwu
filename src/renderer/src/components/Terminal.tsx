@@ -77,9 +77,10 @@ export default function Terminal(props: TerminalProps): JSX.Element {
     term.loadAddon(fitAddon)
     term.open(containerRef)
 
-    // Let Ctrl+Tab / Ctrl+Shift+Tab pass through to the global keydown handler
+    // Let certain Ctrl shortcuts pass through to the global keydown handler
     term.attachCustomKeyEventHandler((e) => {
       if (e.ctrlKey && e.key === 'Tab') return false
+      if (e.ctrlKey && e.key === 'b') return false
       return true
     })
 

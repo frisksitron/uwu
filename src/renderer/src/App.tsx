@@ -54,6 +54,10 @@ export default function App(): JSX.Element {
         : (currentIndex + 1) % scopedTabs.length
       setStore('activeTabId', scopedTabs[next].tabId)
     }
+    if (e.ctrlKey && e.key === 'b') {
+      e.preventDefault()
+      setSidebarCollapsed((c) => !c)
+    }
     if (e.ctrlKey && e.key === 'w') {
       e.preventDefault()
       if (store.activeTabId) closeTab(store.activeTabId)
@@ -63,6 +67,7 @@ export default function App(): JSX.Element {
   onMount(() => window.addEventListener('keydown', handleKeyDown))
   onCleanup(() => window.removeEventListener('keydown', handleKeyDown))
 
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false)
   const [sidebarWidth, setSidebarWidth] = createSignal(240)
 
   function startResize(e: MouseEvent): void {
@@ -153,28 +158,33 @@ export default function App(): JSX.Element {
 
   return (
     <div class="flex flex-col w-full h-full">
-      <TitleBar />
+      <TitleBar
+        collapsed={sidebarCollapsed()}
+        onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+      />
       <UpdateBanner />
       <div class="flex flex-1 overflow-hidden">
-        <Sidebar
-          store={store}
-          setStore={setStore}
-          onAddTab={addTab}
-          onCloseTab={closeTab}
-          onSaveProjects={saveProjects}
-          width={sidebarWidth()}
-        />
-        {/* biome-ignore lint/a11y/useSemanticElements: drag resize handle, not a thematic break */}
-        <div
-          tabIndex={0}
-          role="separator"
-          aria-orientation="vertical"
-          aria-valuenow={sidebarWidth()}
-          aria-valuemin={150}
-          aria-valuemax={500}
-          class="w-1 flex-shrink-0 bg-border hover:bg-accent cursor-col-resize transition-colors"
-          onMouseDown={startResize}
-        />
+        <div classList={{ hidden: sidebarCollapsed() }} class="flex">
+          <Sidebar
+            store={store}
+            setStore={setStore}
+            onAddTab={addTab}
+            onCloseTab={closeTab}
+            onSaveProjects={saveProjects}
+            width={sidebarWidth()}
+          />
+          {/* biome-ignore lint/a11y/useSemanticElements: drag resize handle, not a thematic break */}
+          <div
+            tabIndex={0}
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuenow={sidebarWidth()}
+            aria-valuemin={150}
+            aria-valuemax={500}
+            class="w-1 flex-shrink-0 bg-border hover:bg-accent cursor-col-resize transition-colors"
+            onMouseDown={startResize}
+          />
+        </div>
         <div class="flex-1 relative overflow-hidden">
           <For each={store.tabs}>
             {(tab) => {
