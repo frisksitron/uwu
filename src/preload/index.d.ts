@@ -71,6 +71,41 @@ interface WindowAPI {
   onMaximizedChange: (cb: (maximized: boolean) => void) => () => void
 }
 
+interface OpencodeAPI {
+  start: (projectPath: string) => Promise<{ status: string; error?: string }>
+  stop: (projectPath: string) => Promise<void>
+  status: (projectPath: string) => Promise<string>
+  sessionList: (projectPath: string) => Promise<unknown>
+  sessionCreate: (projectPath: string, title?: string) => Promise<unknown>
+  sessionGet: (projectPath: string, sessionId: string) => Promise<unknown>
+  sessionDelete: (projectPath: string, sessionId: string) => Promise<unknown>
+  sessionAbort: (projectPath: string, sessionId: string) => Promise<unknown>
+  messages: (projectPath: string, sessionId: string) => Promise<unknown>
+  sendMessage: (
+    projectPath: string,
+    sessionId: string,
+    payload: {
+      parts: Array<{ type: 'text'; text: string }>
+      model?: { providerID: string; modelID: string }
+    }
+  ) => Promise<void>
+  permissionRespond: (
+    projectPath: string,
+    sessionId: string,
+    permissionId: string,
+    response: 'once' | 'always' | 'reject'
+  ) => Promise<void>
+  questionReply: (
+    projectPath: string,
+    requestId: string,
+    answers: Array<Array<string>>
+  ) => Promise<void>
+  questionReject: (projectPath: string, requestId: string) => Promise<void>
+  providers: (projectPath: string) => Promise<unknown>
+  config: (projectPath: string) => Promise<unknown>
+  onEvent: (cb: (projectPath: string, event: unknown) => void) => () => void
+}
+
 interface UpdaterAPI {
   check: () => Promise<unknown>
   install: () => Promise<void>
@@ -90,6 +125,7 @@ declare global {
     projectAPI: ProjectAPI
     worktreeAPI: WorktreeAPI
     windowAPI: WindowAPI
+    opencodeAPI: OpencodeAPI
     updaterAPI: UpdaterAPI
   }
 }

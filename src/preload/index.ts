@@ -100,6 +100,65 @@ const windowAPI = {
   }
 }
 
+const opencodeAPI = {
+  start: (projectPath: string): Promise<{ status: string; error?: string }> =>
+    ipcRenderer.invoke('opencode:start', projectPath),
+  stop: (projectPath: string): Promise<void> => ipcRenderer.invoke('opencode:stop', projectPath),
+  status: (projectPath: string): Promise<string> =>
+    ipcRenderer.invoke('opencode:status', projectPath),
+  sessionList: (projectPath: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:session-list', projectPath),
+  sessionCreate: (projectPath: string, title?: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:session-create', projectPath, title),
+  sessionGet: (projectPath: string, sessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:session-get', projectPath, sessionId),
+  sessionDelete: (projectPath: string, sessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:session-delete', projectPath, sessionId),
+  sessionAbort: (projectPath: string, sessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:session-abort', projectPath, sessionId),
+  messages: (projectPath: string, sessionId: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:messages', projectPath, sessionId),
+  sendMessage: (
+    projectPath: string,
+    sessionId: string,
+    payload: {
+      parts: Array<{ type: 'text'; text: string }>
+      model?: { providerID: string; modelID: string }
+    }
+  ): Promise<void> => ipcRenderer.invoke('opencode:send-message', projectPath, sessionId, payload),
+  permissionRespond: (
+    projectPath: string,
+    sessionId: string,
+    permissionId: string,
+    response: 'once' | 'always' | 'reject'
+  ): Promise<void> =>
+    ipcRenderer.invoke(
+      'opencode:permission-respond',
+      projectPath,
+      sessionId,
+      permissionId,
+      response
+    ),
+  questionReply: (
+    projectPath: string,
+    requestId: string,
+    answers: Array<Array<string>>
+  ): Promise<void> =>
+    ipcRenderer.invoke('opencode:question-reply', projectPath, requestId, answers),
+  questionReject: (projectPath: string, requestId: string): Promise<void> =>
+    ipcRenderer.invoke('opencode:question-reject', projectPath, requestId),
+  providers: (projectPath: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:providers', projectPath),
+  config: (projectPath: string): Promise<unknown> =>
+    ipcRenderer.invoke('opencode:config', projectPath),
+  onEvent: (cb: (projectPath: string, event: unknown) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, projectPath: string, event: unknown): void =>
+      cb(projectPath, event)
+    ipcRenderer.on('opencode:event', handler)
+    return () => ipcRenderer.removeListener('opencode:event', handler)
+  }
+}
+
 const updaterAPI = {
   check: (): Promise<unknown> => ipcRenderer.invoke('updater:check'),
   install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
@@ -142,6 +201,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('projectAPI', projectAPI)
     contextBridge.exposeInMainWorld('worktreeAPI', worktreeAPI)
     contextBridge.exposeInMainWorld('windowAPI', windowAPI)
+    contextBridge.exposeInMainWorld('opencodeAPI', opencodeAPI)
     contextBridge.exposeInMainWorld('updaterAPI', updaterAPI)
   } catch (error) {
     console.error(error)
@@ -157,6 +217,8 @@ if (process.contextIsolated) {
   window.worktreeAPI = worktreeAPI
   // @ts-expect-error (window.windowAPI is not in the declared Window type)
   window.windowAPI = windowAPI
+  // @ts-expect-error (window.opencodeAPI is not in the declared Window type)
+  window.opencodeAPI = opencodeAPI
   // @ts-expect-error (window.updaterAPI is not in the declared Window type)
   window.updaterAPI = updaterAPI
 }

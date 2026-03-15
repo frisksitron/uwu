@@ -5,6 +5,13 @@ export interface PersistentTerminal {
   customLabel?: boolean
 }
 
+export interface OpencodeInstance {
+  id: string
+  sessionId: string
+  label: string
+  worktreePath?: string
+}
+
 // Runtime only — returned from main process, not persisted
 export interface WorktreeInfo {
   path: string
@@ -25,6 +32,7 @@ export interface Project {
   envVars?: Record<string, string>
   syncFiles?: string[]
   expandedWorktrees?: Record<string, boolean>
+  opencodeInstances?: OpencodeInstance[]
 }
 
 // Runtime only — not persisted
@@ -33,11 +41,13 @@ export interface Tab {
   label: string
   cwd: string
   projectId: string
-  type: 'script' | 'persistent'
+  type: 'script' | 'persistent' | 'opencode'
   persistentTerminalId?: string
+  opencodeInstanceId?: string
   initialCommand?: string
   status?: 'idle' | 'running' | 'exited'
   exitCode?: number
+  sessionId?: string
 }
 
 export interface TerminalCacheEntry {

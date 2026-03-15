@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
+import { killAllOpencodeServers, setupOpencodeIpc } from './ipc/opencode'
 import { setupProjectIpc } from './ipc/project'
 import { killAllTerminals, setupTerminalIpc } from './ipc/terminal'
 import { setupUpdaterIpc } from './ipc/updater'
@@ -25,7 +26,10 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow.show())
-  mainWindow.on('close', () => killAllTerminals())
+  mainWindow.on('close', () => {
+    killAllTerminals()
+    killAllOpencodeServers()
+  })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -41,6 +45,7 @@ function createWindow(): void {
   setupTerminalIpc(mainWindow)
   setupWindowIpc(mainWindow)
   setupUpdaterIpc(mainWindow)
+  setupOpencodeIpc(mainWindow)
 }
 
 app.whenReady().then(() => {

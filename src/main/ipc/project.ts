@@ -11,6 +11,7 @@ interface ProjectEntry {
   projectType: string
   packageManager?: string
   hiddenScripts?: string[]
+  opencodeInstances?: Array<{ id: string; sessionId: string; label: string; worktreePath?: string }>
 }
 
 interface ProjectSchema {
