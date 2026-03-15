@@ -149,7 +149,10 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       projectPath: string,
       sessionId: string,
       payload: {
-        parts: Array<{ type: 'text'; text: string }>
+        parts: Array<
+          | { type: 'text'; text: string }
+          | { type: 'file'; mime: string; url: string; filename?: string }
+        >
         model?: { providerID: string; modelID: string }
         agent?: string
       }

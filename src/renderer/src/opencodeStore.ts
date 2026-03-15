@@ -14,6 +14,20 @@ export interface OcTextPart {
   text: string
 }
 
+export interface OcPatchFileInfo {
+  filePath: string
+  relativePath: string
+  type: 'update' | 'create' | 'delete'
+  diff: string
+  additions: number
+  deletions: number
+}
+
+export interface OcPatchMetadata {
+  diff: string
+  files: OcPatchFileInfo[]
+}
+
 export interface OcToolPart {
   id: string
   messageID: string
@@ -25,6 +39,7 @@ export interface OcToolPart {
     output?: string
     error?: string
     title?: string
+    metadata?: OcPatchMetadata
   }
 }
 
@@ -37,7 +52,23 @@ export interface OcReasoningPart {
   endTime?: number
 }
 
-export type OcPart = OcTextPart | OcToolPart | OcReasoningPart
+export interface OcFilePart {
+  id: string
+  messageID: string
+  type: 'file'
+  mime: string
+  filename?: string
+  url: string
+}
+
+export type OcPart = OcTextPart | OcToolPart | OcReasoningPart | OcFilePart
+
+export interface ImageAttachment {
+  id: string
+  dataUrl: string
+  mime: string
+  filename: string
+}
 
 export interface OcMessageError {
   name: string
@@ -228,7 +259,11 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
         output?: string
         error?: string
         title?: string
+        metadata?: Record<string, unknown>
       }
+      mime?: string
+      filename?: string
+      url?: string
     }>
   }> | null
   if (!data) return
@@ -264,8 +299,12 @@ interface RawPart {
     output?: string
     error?: string
     title?: string
+    metadata?: Record<string, unknown>
   }
   time?: { start?: number; end?: number }
+  mime?: string
+  filename?: string
+  url?: string
 }
 
 function parseParts(raw: RawPart[]): OcPart[] {
@@ -282,7 +321,24 @@ function parseParts(raw: RawPart[]): OcPart[] {
         startTime: p.time?.start,
         endTime: p.time?.end
       })
+    } else if (p.type === 'file' && p.url) {
+      parts.push({
+        id: p.id,
+        messageID: p.messageID,
+        type: 'file',
+        mime: p.mime || 'application/octet-stream',
+        filename: p.filename,
+        url: p.url
+      })
     } else if (p.type === 'tool') {
+      let patchMeta: OcPatchMetadata | undefined
+      const rawMeta = p.state?.metadata as { diff?: string; files?: OcPatchFileInfo[] } | undefined
+      if (p.tool === 'apply_patch' && rawMeta?.files && Array.isArray(rawMeta.files)) {
+        patchMeta = {
+          diff: rawMeta.diff || '',
+          files: rawMeta.files
+        }
+      }
       parts.push({
         id: p.id,
         messageID: p.messageID,
@@ -293,7 +349,8 @@ function parseParts(raw: RawPart[]): OcPart[] {
           input: p.state?.input,
           output: p.state?.output,
           error: p.state?.error,
-          title: p.state?.title
+          title: p.state?.title,
+          metadata: patchMeta
         }
       })
     }
@@ -306,13 +363,26 @@ export async function sendMessage(
   sessionId: string,
   text: string,
   model?: { providerID: string; modelID: string },
-  agent?: string
+  agent?: string,
+  images?: ImageAttachment[]
 ): Promise<void> {
   setState('isGenerating', sessionId, true)
   setState('generationStartTimes', sessionId, Date.now())
   try {
+    const parts: Array<
+      | { type: 'text'; text: string }
+      | { type: 'file'; mime: string; url: string; filename?: string }
+    > = []
+    if (text) {
+      parts.push({ type: 'text', text })
+    }
+    if (images) {
+      for (const img of images) {
+        parts.push({ type: 'file', mime: img.mime, url: img.dataUrl, filename: img.filename })
+      }
+    }
     await window.opencodeAPI.sendMessage(projectPath, sessionId, {
-      parts: [{ type: 'text', text }],
+      parts,
       // Unwrap potential Solid store proxies — IPC structured clone can't serialize them
       model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
       agent
@@ -402,7 +472,11 @@ export function initEventListener(): () => void {
               output?: string
               error?: string
               title?: string
+              metadata?: Record<string, unknown>
             }
+            mime?: string
+            filename?: string
+            url?: string
           }
         }
         // Upsert part into message

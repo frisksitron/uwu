@@ -11,6 +11,7 @@ import {
 } from 'lucide-solid'
 import { createSignal, For, type JSX, Match, Show, Switch } from 'solid-js'
 import type {
+  OcFilePart,
   OcMessage,
   OcMessageError,
   OcPart,
@@ -21,6 +22,7 @@ import type {
   OcToolPart
 } from '../../opencodeStore'
 import MessageContent from './MessageContent'
+import PatchDiffView from './PatchDiffView'
 import PermissionBanner from './PermissionBanner'
 import QuestionBanner from './QuestionBanner'
 
@@ -72,7 +74,8 @@ function groupParts(parts: OcPart[]): GroupedItem[] {
 }
 
 function ToolCard(props: { part: OcToolPart }): JSX.Element {
-  const [expanded, setExpanded] = createSignal(false)
+  const isPatch = () => props.part.tool === 'apply_patch'
+  const [expanded, setExpanded] = createSignal(isPatch())
 
   const statusIcon = (): JSX.Element => {
     switch (props.part.state.status) {
@@ -105,25 +108,34 @@ function ToolCard(props: { part: OcToolPart }): JSX.Element {
       </button>
       <Show when={expanded()}>
         <div class="px-2.5 pb-2.5 space-y-2 border-t border-border/60">
-          <Show when={props.part.state.input}>
-            <div class="pt-2">
-              <span class="text-muted text-[10px] font-semibold uppercase tracking-wider">
-                Input
-              </span>
-              <pre class="bg-app border border-border/60 rounded-md p-2 mt-1 overflow-x-auto text-[11px] text-content whitespace-pre-wrap">
-                {JSON.stringify(props.part.state.input, null, 2)}
-              </pre>
-            </div>
-          </Show>
-          <Show when={props.part.state.output}>
-            <div class="pt-2">
-              <span class="text-muted text-[10px] font-semibold uppercase tracking-wider">
-                Output
-              </span>
-              <pre class="bg-app border border-border/60 rounded-md p-2 mt-1 overflow-x-auto text-[11px] text-content whitespace-pre-wrap max-h-40 overflow-y-auto">
-                {props.part.state.output}
-              </pre>
-            </div>
+          <Show
+            when={isPatch()}
+            fallback={
+              <>
+                <Show when={props.part.state.input}>
+                  <div class="pt-2">
+                    <span class="text-muted text-[10px] font-semibold uppercase tracking-wider">
+                      Input
+                    </span>
+                    <pre class="bg-app border border-border/60 rounded-md p-2 mt-1 overflow-x-auto text-[11px] text-content whitespace-pre-wrap">
+                      {JSON.stringify(props.part.state.input, null, 2)}
+                    </pre>
+                  </div>
+                </Show>
+                <Show when={props.part.state.output}>
+                  <div class="pt-2">
+                    <span class="text-muted text-[10px] font-semibold uppercase tracking-wider">
+                      Output
+                    </span>
+                    <pre class="bg-app border border-border/60 rounded-md p-2 mt-1 overflow-x-auto text-[11px] text-content whitespace-pre-wrap max-h-40 overflow-y-auto">
+                      {props.part.state.output}
+                    </pre>
+                  </div>
+                </Show>
+              </>
+            }
+          >
+            <PatchDiffView part={props.part} />
           </Show>
           <Show when={props.part.state.error}>
             <div class="pt-2">
@@ -239,6 +251,27 @@ function MessagePart(props: {
       </Match>
       <Match when={props.part.type === 'tool' && props.part}>
         {(part) => <ToolCard part={part() as OcToolPart} />}
+      </Match>
+      <Match when={props.part.type === 'file' && props.part}>
+        {(part) => {
+          const filePart = () => part() as OcFilePart
+          return (
+            <Show
+              when={filePart().mime.startsWith('image/')}
+              fallback={
+                <span class="text-[11px] text-muted italic">
+                  {filePart().filename || 'file attachment'}
+                </span>
+              }
+            >
+              <img
+                src={filePart().url}
+                alt={filePart().filename || 'image'}
+                class="max-w-[300px] max-h-[200px] rounded border border-border"
+              />
+            </Show>
+          )
+        }}
       </Match>
     </Switch>
   )

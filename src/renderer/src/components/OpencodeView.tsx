@@ -3,6 +3,7 @@ import { createEffect, createSignal, type JSX, onCleanup, onMount, Show } from '
 import {
   abortGeneration,
   createSession,
+  type ImageAttachment,
   loadMessages,
   loadSessions,
   opencodeState,
@@ -134,7 +135,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     }
   })
 
-  async function handleSend(text: string): Promise<void> {
+  async function handleSend(text: string, images: ImageAttachment[]): Promise<void> {
     let sessionId = props.sessionId
     if (!sessionId) {
       const newSession = await createSession(props.projectPath)
@@ -142,7 +143,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
       sessionId = newSession.id
       props.onSessionChange(sessionId)
     }
-    await sendMessage(props.projectPath, sessionId, text, model(), agent())
+    await sendMessage(props.projectPath, sessionId, text, model(), agent(), images)
   }
 
   async function handleAbort(): Promise<void> {
