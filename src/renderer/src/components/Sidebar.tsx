@@ -461,17 +461,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
           {(project) => (
             <div>
               {/* Project header */}
-              <div class="group flex items-center gap-1 px-2 h-9 border-b border-border cursor-pointer hover:bg-hover">
-                <span
-                  role="menuitem"
-                  tabIndex={0}
-                  class="flex-1 flex items-center gap-1.5 min-w-0"
-                  onClick={() => toggleCollapse(project.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') toggleCollapse(project.id)
-                  }}
-                  title={project.path}
-                >
+              <div
+                role="menuitem"
+                tabIndex={0}
+                class="group flex items-center gap-1 px-2 h-9 border-b border-border cursor-pointer hover:bg-hover"
+                onClick={() => toggleCollapse(project.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') toggleCollapse(project.id)
+                }}
+              >
+                <span class="flex-1 flex items-center gap-1.5 min-w-0" title={project.path}>
                   <span class="text-muted flex-shrink-0 flex items-center">
                     {project.collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
                   </span>
