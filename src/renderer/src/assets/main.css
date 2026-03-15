@@ -21,6 +21,136 @@
   --color-status-action:  #d96a94;
 }
 
+.markdown {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-content);
+}
+
+.markdown p {
+  margin: 0.35em 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  color: var(--color-heading);
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+}
+
+.markdown h1 { font-size: 1.15em; }
+.markdown h2 { font-size: 1.1em; }
+.markdown h3 { font-size: 1.05em; }
+.markdown h4,
+.markdown h5,
+.markdown h6 { font-size: 1em; }
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.25em;
+  margin: 0.35em 0;
+}
+
+.markdown li {
+  margin: 0.15em 0;
+}
+
+.markdown li::marker {
+  color: var(--color-accent);
+}
+
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  text-decoration-style: solid;
+}
+
+.markdown blockquote {
+  border-left: 3px solid var(--color-border);
+  background: var(--color-sidebar);
+  border-radius: 0 0.25rem 0.25rem 0;
+  padding: 0.4em 0.75em;
+  margin: 0.5em 0;
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 0.75em 0;
+}
+
+.markdown table {
+  font-size: 11px;
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+}
+
+.markdown th {
+  background: var(--color-sidebar);
+  font-weight: 600;
+  text-align: left;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-border);
+  padding: 0.3em 0.5em;
+}
+
+.markdown tr:nth-child(even) {
+  background: var(--color-sidebar);
+}
+
+.markdown strong {
+  color: var(--color-heading);
+}
+
+.markdown img {
+  max-width: 100%;
+  border-radius: 0.25rem;
+  border: 1px solid var(--color-border);
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.shiki-wrapper pre {
+  border: 1px solid var(--color-border);
+  border-radius: 0.25rem;
+  padding: 0.625rem;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.625;
+}
+
+@keyframes pulse-dot {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+
+.pulse-dots::before {
+  content: '···';
+  letter-spacing: 2px;
+  animation: pulse-dot 1.4s infinite ease-in-out;
+}
+
 @layer base {
   html, body, #root {
     width: 100%;

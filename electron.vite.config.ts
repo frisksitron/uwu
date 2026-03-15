@@ -18,6 +18,9 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [solid(), tailwindcss()]
+    plugins: [solid(), tailwindcss()],
+    optimizeDeps: {
+      include: ['debug', 'extend', 'style-to-object', 'inline-style-parser', 'dequal']
+    }
   }
 })
