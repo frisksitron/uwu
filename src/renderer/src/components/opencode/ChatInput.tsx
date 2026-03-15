@@ -4,6 +4,7 @@ import { createEffect, createSignal, type JSX, onCleanup, Show } from 'solid-js'
 interface ChatInputProps {
   isGenerating: boolean
   generationStartTime?: number
+  history: string[]
   onSend: (text: string) => void
   onAbort: () => void
 }
@@ -11,6 +12,8 @@ interface ChatInputProps {
 export default function ChatInput(props: ChatInputProps): JSX.Element {
   const [text, setText] = createSignal('')
   const [elapsed, setElapsed] = createSignal(0)
+  const [historyIndex, setHistoryIndex] = createSignal(-1)
+  let savedDraft = ''
   let textareaRef: HTMLTextAreaElement | undefined
 
   // Live elapsed counter during generation
@@ -27,10 +30,60 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
     }
   })
 
+  function resizeTextarea(): void {
+    if (!textareaRef) return
+    textareaRef.style.height = 'auto'
+    textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 200)}px`
+  }
+
+  function setTextAndResize(value: string): void {
+    setText(value)
+    if (textareaRef) textareaRef.value = value
+    resizeTextarea()
+  }
+
   function handleKeyDown(e: KeyboardEvent): void {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       submit()
+      return
+    }
+
+    // History navigation with up/down arrows
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      const history = props.history
+      if (history.length === 0) return
+
+      // Only navigate history when cursor is at the start/end of text
+      const textarea = e.target as HTMLTextAreaElement
+      const atStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0
+      const atEnd =
+        textarea.selectionStart === textarea.value.length &&
+        textarea.selectionEnd === textarea.value.length
+
+      if (e.key === 'ArrowUp' && atStart) {
+        e.preventDefault()
+        const idx = historyIndex()
+        if (idx === -1) {
+          savedDraft = text()
+          setHistoryIndex(history.length - 1)
+          setTextAndResize(history[history.length - 1])
+        } else if (idx > 0) {
+          setHistoryIndex(idx - 1)
+          setTextAndResize(history[idx - 1])
+        }
+      } else if (e.key === 'ArrowDown' && atEnd) {
+        e.preventDefault()
+        const idx = historyIndex()
+        if (idx === -1) return
+        if (idx < history.length - 1) {
+          setHistoryIndex(idx + 1)
+          setTextAndResize(history[idx + 1])
+        } else {
+          setHistoryIndex(-1)
+          setTextAndResize(savedDraft)
+        }
+      }
     }
   }
 
@@ -39,14 +92,16 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
     if (!value || props.isGenerating) return
     props.onSend(value)
     setText('')
+    setHistoryIndex(-1)
+    savedDraft = ''
     if (textareaRef) textareaRef.style.height = 'auto'
   }
 
   function handleInput(e: InputEvent): void {
     const target = e.target as HTMLTextAreaElement
     setText(target.value)
-    target.style.height = 'auto'
-    target.style.height = `${Math.min(target.scrollHeight, 200)}px`
+    setHistoryIndex(-1)
+    resizeTextarea()
   }
 
   return (
@@ -90,8 +145,8 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
         <Show
           when={props.isGenerating}
           fallback={
-            <span class="text-[10px] text-muted/50 select-none">
-              Enter to send &middot; Shift+Enter for new line
+            <span class="text-[10px] text-muted/80 select-none">
+              Enter to send &middot; Shift+Enter for new line &middot; &uarr;&darr; for history
             </span>
           }
         >

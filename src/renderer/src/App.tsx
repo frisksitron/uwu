@@ -44,13 +44,15 @@ export default function App(): JSX.Element {
   const handleKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey && e.key === 'Tab') {
       e.preventDefault()
-      const tabs = store.tabs
-      if (tabs.length === 0) return
-      const currentIndex = tabs.findIndex((t) => t.tabId === store.activeTabId)
+      const activeTab = store.tabs.find((t) => t.tabId === store.activeTabId)
+      if (!activeTab) return
+      const scopedTabs = store.tabs.filter((t) => t.cwd === activeTab.cwd)
+      if (scopedTabs.length === 0) return
+      const currentIndex = scopedTabs.findIndex((t) => t.tabId === store.activeTabId)
       const next = e.shiftKey
-        ? (currentIndex - 1 + tabs.length) % tabs.length
-        : (currentIndex + 1) % tabs.length
-      setStore('activeTabId', tabs[next].tabId)
+        ? (currentIndex - 1 + scopedTabs.length) % scopedTabs.length
+        : (currentIndex + 1) % scopedTabs.length
+      setStore('activeTabId', scopedTabs[next].tabId)
     }
     if (e.ctrlKey && e.key === 'w') {
       e.preventDefault()
@@ -183,7 +185,7 @@ export default function App(): JSX.Element {
                   tabId={tab.tabId}
                   visible={store.activeTabId === tab.tabId}
                   projectPath={tab.cwd}
-                  sessionId={tab.sessionId as string}
+                  sessionId={tab.sessionId}
                   onSessionChange={(sessionId) => handleSessionChange(tab, sessionId)}
                   onTitleChange={(title) => handleTitleChange(tab, title)}
                 />

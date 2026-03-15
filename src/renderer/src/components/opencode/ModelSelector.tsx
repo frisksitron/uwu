@@ -4,7 +4,7 @@ import { opencodeState } from '../../opencodeStore'
 interface ModelSelectorProps {
   projectPath: string
   value?: { providerID: string; modelID: string }
-  onChange: (model: { providerID: string; modelID: string }) => void
+  onChange: (model: { providerID: string; modelID: string } | undefined) => void
 }
 
 interface ProviderModel {
@@ -45,27 +45,29 @@ export default function ModelSelector(props: ModelSelectorProps): JSX.Element {
     fetchModels
   )
 
-  const currentLabel = (): string => {
-    if (!props.value) return 'Default'
+  const label = (): string => {
+    if (!props.value) return 'Default model'
     const m = models()?.find(
       (m) => m.providerID === props.value?.providerID && m.modelID === props.value?.modelID
     )
-    return m ? m.modelName : props.value.modelID
+    return m ? `${m.providerName} / ${m.modelName}` : props.value.modelID
   }
 
   return (
-    <Show when={models()?.length}>
+    <Show when={(models()?.length ?? 0) > 0}>
       <select
         value={props.value ? `${props.value.providerID}:${props.value.modelID}` : ''}
         onChange={(e) => {
           const val = e.currentTarget.value
-          if (!val) return
+          if (!val) {
+            props.onChange(undefined)
+            return
+          }
           const [providerID, ...rest] = val.split(':')
-          const modelID = rest.join(':')
-          props.onChange({ providerID, modelID })
+          props.onChange({ providerID, modelID: rest.join(':') })
         }}
-        class="bg-app border border-border rounded px-2 py-1 text-[11px] text-content cursor-pointer focus:outline-none focus:border-accent transition-colors"
-        title={`Model: ${currentLabel()}`}
+        class="bg-app border border-border rounded px-2 py-0.5 text-[11px] text-content cursor-pointer focus:outline-none focus:border-accent transition-colors"
+        title={`Model: ${label()}`}
       >
         <option value="">Default</option>
         <For each={models()}>

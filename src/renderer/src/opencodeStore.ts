@@ -28,13 +28,24 @@ export interface OcToolPart {
   }
 }
 
-export type OcPart = OcTextPart | OcToolPart
+export interface OcReasoningPart {
+  id: string
+  messageID: string
+  type: 'reasoning'
+  text: string
+  startTime?: number
+  endTime?: number
+}
+
+export type OcPart = OcTextPart | OcToolPart | OcReasoningPart
 
 export interface OcMessageError {
   name: string
   message: string
   statusCode?: number
   isRetryable?: boolean
+  providerID?: string
+  retries?: number
 }
 
 export interface OcMessage {
@@ -90,6 +101,8 @@ interface OpencodeState {
   isGenerating: Record<string, boolean>
   generationStartTimes: Record<string, number>
   generationDurations: Record<string, number>
+  sessionAgents: Record<string, string>
+  sessionModels: Record<string, { providerID: string; modelID: string }>
   rawEvents: RawEvent[]
 }
 
@@ -108,6 +121,8 @@ const [state, setState] = createStore<OpencodeState>({
   isGenerating: {},
   generationStartTimes: {},
   generationDurations: {},
+  sessionAgents: {},
+  sessionModels: {},
   rawEvents: []
 })
 
@@ -168,6 +183,28 @@ export async function createSession(
   return session
 }
 
+type RawError = {
+  name: string
+  data?: {
+    message?: string
+    statusCode?: number
+    isRetryable?: boolean
+    providerID?: string
+    retries?: number
+  }
+}
+
+function parseError(raw: RawError): OcMessageError {
+  return {
+    name: raw.name,
+    message: raw.data?.message || raw.name,
+    statusCode: raw.data?.statusCode,
+    isRetryable: raw.data?.isRetryable,
+    providerID: raw.data?.providerID,
+    retries: raw.data?.retries
+  }
+}
+
 export async function loadMessages(projectPath: string, sessionId: string): Promise<void> {
   const data = (await window.opencodeAPI.messages(projectPath, sessionId)) as Array<{
     info: {
@@ -175,10 +212,9 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
       sessionID: string
       role: 'user' | 'assistant'
       time: { created: number }
-      error?: {
-        name: string
-        data?: { message?: string; statusCode?: number; isRetryable?: boolean }
-      }
+      agent?: string
+      model?: { providerID: string; modelID: string }
+      error?: RawError
     }
     parts: Array<{
       id: string
@@ -202,38 +238,50 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
     role: m.info.role,
     createdAt: m.info.time.created,
     parts: parseParts(m.parts),
-    error: m.info.error
-      ? {
-          name: m.info.error.name,
-          message: m.info.error.data?.message || m.info.error.name,
-          statusCode: m.info.error.data?.statusCode,
-          isRetryable: m.info.error.data?.isRetryable
-        }
-      : undefined
+    error: m.info.error ? parseError(m.info.error) : undefined
   }))
   setState('messages', sessionId, messages)
+
+  // Extract agent/model from last user message as the session's active values
+  const lastUser = [...data].reverse().find((m) => m.info.role === 'user')
+  if (lastUser?.info.agent) {
+    setState('sessionAgents', sessionId, lastUser.info.agent)
+  }
+  if (lastUser?.info.model) {
+    setState('sessionModels', sessionId, lastUser.info.model)
+  }
 }
 
-function parseParts(
-  raw: Array<{
-    id: string
-    messageID: string
-    type: string
-    text?: string
-    tool?: string
-    state?: {
-      status: string
-      input?: Record<string, unknown>
-      output?: string
-      error?: string
-      title?: string
-    }
-  }>
-): OcPart[] {
+interface RawPart {
+  id: string
+  messageID: string
+  type: string
+  text?: string
+  tool?: string
+  state?: {
+    status: string
+    input?: Record<string, unknown>
+    output?: string
+    error?: string
+    title?: string
+  }
+  time?: { start?: number; end?: number }
+}
+
+function parseParts(raw: RawPart[]): OcPart[] {
   const parts: OcPart[] = []
   for (const p of raw) {
     if (p.type === 'text' && p.text !== undefined) {
       parts.push({ id: p.id, messageID: p.messageID, type: 'text', text: p.text })
+    } else if (p.type === 'reasoning') {
+      parts.push({
+        id: p.id,
+        messageID: p.messageID,
+        type: 'reasoning',
+        text: p.text ?? '',
+        startTime: p.time?.start,
+        endTime: p.time?.end
+      })
     } else if (p.type === 'tool') {
       parts.push({
         id: p.id,
@@ -257,16 +305,20 @@ export async function sendMessage(
   projectPath: string,
   sessionId: string,
   text: string,
-  model?: { providerID: string; modelID: string }
+  model?: { providerID: string; modelID: string },
+  agent?: string
 ): Promise<void> {
   setState('isGenerating', sessionId, true)
   setState('generationStartTimes', sessionId, Date.now())
   try {
     await window.opencodeAPI.sendMessage(projectPath, sessionId, {
       parts: [{ type: 'text', text }],
-      model
+      // Unwrap potential Solid store proxies — IPC structured clone can't serialize them
+      model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
+      agent
     })
-  } catch {
+  } catch (err) {
+    console.error('[opencode] sendMessage failed:', err)
     setState('isGenerating', sessionId, false)
   }
 }
@@ -386,21 +438,19 @@ export function initEventListener(): () => void {
             sessionID: string
             role: 'user' | 'assistant'
             time: { created: number }
-            error?: {
-              name: string
-              data?: { message?: string; statusCode?: number; isRetryable?: boolean }
-            }
+            agent?: string
+            model?: { providerID: string; modelID: string }
+            error?: RawError
           }
         }
         const msg = props.info
-        const error: OcMessageError | undefined = msg.error
-          ? {
-              name: msg.error.name,
-              message: msg.error.data?.message || msg.error.name,
-              statusCode: msg.error.data?.statusCode,
-              isRetryable: msg.error.data?.isRetryable
-            }
-          : undefined
+
+        // Track active agent/model from user messages
+        if (msg.role === 'user') {
+          if (msg.agent) setState('sessionAgents', msg.sessionID, msg.agent)
+          if (msg.model) setState('sessionModels', msg.sessionID, msg.model)
+        }
+        const error: OcMessageError | undefined = msg.error ? parseError(msg.error) : undefined
 
         setState(
           produce((s: OpencodeState) => {
@@ -459,7 +509,10 @@ export function initEventListener(): () => void {
             if (!msgs) return
             for (const msg of msgs) {
               for (const part of msg.parts) {
-                if (part.type === 'text' && s.streamingContent[part.id]) {
+                if (
+                  (part.type === 'text' || part.type === 'reasoning') &&
+                  s.streamingContent[part.id]
+                ) {
                   part.text = s.streamingContent[part.id]
                   delete s.streamingContent[part.id]
                 }
@@ -564,21 +617,7 @@ export function initEventListener(): () => void {
   })
 }
 
-function upsertPart(raw: {
-  id: string
-  sessionID: string
-  messageID: string
-  type: string
-  text?: string
-  tool?: string
-  state?: {
-    status: string
-    input?: Record<string, unknown>
-    output?: string
-    error?: string
-    title?: string
-  }
-}): void {
+function upsertPart(raw: RawPart & { sessionID: string }): void {
   setState(
     produce((s: OpencodeState) => {
       const msgs = s.messages[raw.sessionID]
@@ -592,12 +631,16 @@ function upsertPart(raw: {
 
       const existingIdx = msg.parts.findIndex((p) => p.id === raw.id)
       if (existingIdx !== -1) {
-        // Update existing part
-        if (newPart.type === 'text') {
-          const existing = msg.parts[existingIdx]
-          if (existing.type === 'text') {
-            // Use streaming content if available
-            existing.text = s.streamingContent[raw.id] || newPart.text
+        const existing = msg.parts[existingIdx]
+        if (
+          (newPart.type === 'text' && existing.type === 'text') ||
+          (newPart.type === 'reasoning' && existing.type === 'reasoning')
+        ) {
+          // Use streaming content if available, otherwise use the final text
+          existing.text = s.streamingContent[raw.id] || newPart.text
+          if (newPart.type === 'reasoning' && existing.type === 'reasoning') {
+            existing.startTime = newPart.startTime
+            existing.endTime = newPart.endTime
           }
         } else {
           msg.parts[existingIdx] = newPart

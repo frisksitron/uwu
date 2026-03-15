@@ -12,6 +12,7 @@ import {
   sendMessage,
   startServer
 } from '../opencodeStore'
+import AgentSelector from './opencode/AgentSelector'
 import ChatInput from './opencode/ChatInput'
 import MessageList from './opencode/MessageList'
 import ModelSelector from './opencode/ModelSelector'
@@ -22,13 +23,24 @@ interface OpencodeViewProps {
   tabId: string
   visible: boolean
   projectPath: string
-  sessionId: string
+  sessionId?: string
   onSessionChange: (sessionId: string) => void
   onTitleChange?: (title: string) => void
 }
 
 export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
-  const [model, setModel] = createSignal<{ providerID: string; modelID: string } | undefined>()
+  // Local overrides — when set, take priority over server values for the next message
+  const [modelOverride, setModelOverride] = createSignal<
+    { providerID: string; modelID: string } | undefined
+  >()
+  const [agentOverride, setAgentOverride] = createSignal<string | undefined>()
+
+  // Resolved values: local override > server's last-used value (from user messages)
+  const model = () =>
+    modelOverride() ?? (props.sessionId ? opencodeState.sessionModels[props.sessionId] : undefined)
+  const agent = () =>
+    agentOverride() ?? (props.sessionId ? opencodeState.sessionAgents[props.sessionId] : undefined)
+
   const [showRaw, setShowRaw] = createSignal(false)
   const [showHistory, setShowHistory] = createSignal(false)
   const [lockedToBottom, setLockedToBottom] = createSignal(true)
@@ -57,17 +69,34 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     onCleanup(() => observer.disconnect())
   })
 
-  const messages = () => opencodeState.messages[props.sessionId] || []
-  const isGenerating = () => opencodeState.isGenerating[props.sessionId] || false
-  const permissions = () => opencodeState.pendingPermissions[props.sessionId] || []
-  const questions = () => opencodeState.pendingQuestions[props.sessionId] || []
+  const messages = () =>
+    (props.sessionId ? opencodeState.messages[props.sessionId] : undefined) || []
+  const isGenerating = () =>
+    (props.sessionId && opencodeState.isGenerating[props.sessionId]) || false
+  const permissions = () =>
+    (props.sessionId ? opencodeState.pendingPermissions[props.sessionId] : undefined) || []
+  const questions = () =>
+    (props.sessionId ? opencodeState.pendingQuestions[props.sessionId] : undefined) || []
   const streamingContent = () => opencodeState.streamingContent
-  const generationStartTime = () => opencodeState.generationStartTimes[props.sessionId]
-  const generationDuration = () => opencodeState.generationDurations[props.sessionId]
+  const generationStartTime = () =>
+    props.sessionId ? opencodeState.generationStartTimes[props.sessionId] : undefined
+  const generationDuration = () =>
+    props.sessionId ? opencodeState.generationDurations[props.sessionId] : undefined
+  const inputHistory = () =>
+    messages()
+      .filter((m) => m.role === 'user')
+      .map((m) =>
+        m.parts
+          .filter((p) => p.type === 'text')
+          .map((p) => (p as { text: string }).text)
+          .join('')
+      )
+      .filter(Boolean)
 
   const sessions = () => opencodeState.sessions[props.projectPath] || []
 
-  const session = () => sessions().find((s) => s.id === props.sessionId)
+  const session = () =>
+    props.sessionId ? sessions().find((s) => s.id === props.sessionId) : undefined
 
   function handleScroll(): void {
     if (!scrollRef) return
@@ -98,10 +127,18 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   })
 
   async function handleSend(text: string): Promise<void> {
-    await sendMessage(props.projectPath, props.sessionId, text, model())
+    let sessionId = props.sessionId
+    if (!sessionId) {
+      const newSession = await createSession(props.projectPath)
+      if (!newSession) return
+      sessionId = newSession.id
+      props.onSessionChange(sessionId)
+    }
+    await sendMessage(props.projectPath, sessionId, text, model(), agent())
   }
 
   async function handleAbort(): Promise<void> {
+    if (!props.sessionId) return
     await abortGeneration(props.projectPath, props.sessionId)
   }
 
@@ -109,6 +146,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     permissionId: string,
     response: 'once' | 'always' | 'reject'
   ): Promise<void> {
+    if (!props.sessionId) return
     await respondPermission(props.projectPath, props.sessionId, permissionId, response)
   }
 
@@ -124,6 +162,8 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   }
 
   async function handleNewSession(): Promise<void> {
+    setModelOverride(undefined)
+    setAgentOverride(undefined)
     const newSession = await createSession(props.projectPath)
     if (newSession) {
       props.onSessionChange(newSession.id)
@@ -132,6 +172,8 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
   async function handleSelectSession(sessionId: string): Promise<void> {
     setShowHistory(false)
+    setModelOverride(undefined)
+    setAgentOverride(undefined)
     props.onSessionChange(sessionId)
     await loadMessages(props.projectPath, sessionId)
     setLockedToBottom(true)
@@ -147,11 +189,20 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
       }}
     >
       {/* Top bar */}
-      <div class="flex items-center gap-2 px-3 h-8 border-b border-border bg-sidebar flex-shrink-0">
+      <div class="flex items-center gap-2 px-3 h-9 border-b border-border bg-sidebar flex-shrink-0">
         <span class="flex-1 text-[12px] text-content truncate font-medium">
           {session()?.title || 'AI Chat'}
         </span>
-        <ModelSelector projectPath={props.projectPath} value={model()} onChange={setModel} />
+        <AgentSelector
+          projectPath={props.projectPath}
+          value={agent()}
+          onChange={setAgentOverride}
+        />
+        <ModelSelector
+          projectPath={props.projectPath}
+          value={model()}
+          onChange={setModelOverride}
+        />
         <button
           type="button"
           onClick={() => setShowRaw((v) => !v)}
@@ -189,7 +240,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
             <div class="absolute right-0 top-full mt-1 z-50 w-64 max-h-72 overflow-y-auto bg-sidebar border border-border rounded shadow-lg py-1">
               <SessionPicker
                 sessions={sessions()}
-                currentSessionId={props.sessionId}
+                currentSessionId={props.sessionId ?? ''}
                 onSelect={handleSelectSession}
               />
             </div>
@@ -221,7 +272,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
                   <div class="flex items-center justify-center h-full">
                     <div class="w-72 max-h-full overflow-y-auto">
                       <Show
-                        when={sessions().filter((s) => s.id !== props.sessionId).length > 0}
+                        when={sessions().filter((s) => s.id !== (props.sessionId ?? '')).length > 0}
                         fallback={
                           <p class="text-muted text-[12px] opacity-60 select-none text-center">
                             Send a message to start the conversation.
@@ -232,8 +283,8 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
                           Previous sessions
                         </p>
                         <SessionPicker
-                          sessions={sessions().filter((s) => s.id !== props.sessionId)}
-                          currentSessionId={props.sessionId}
+                          sessions={sessions().filter((s) => s.id !== (props.sessionId ?? ''))}
+                          currentSessionId={props.sessionId ?? ''}
                           onSelect={handleSelectSession}
                         />
                         <div class="border-t border-border mt-2 pt-2 px-3">
@@ -284,6 +335,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
       <ChatInput
         isGenerating={isGenerating()}
         generationStartTime={generationStartTime()}
+        history={inputHistory()}
         onSend={handleSend}
         onAbort={handleAbort}
       />

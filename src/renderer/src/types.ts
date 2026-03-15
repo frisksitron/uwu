@@ -7,7 +7,7 @@ export interface PersistentTerminal {
 
 export interface OpencodeInstance {
   id: string
-  sessionId: string
+  sessionId?: string
   label: string
   worktreePath?: string
 }

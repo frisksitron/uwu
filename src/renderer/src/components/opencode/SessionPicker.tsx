@@ -22,7 +22,7 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 export default function SessionPicker(props: SessionPickerProps): JSX.Element {
-  const sorted = () => [...props.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+  const sorted = () => [...props.sessions].sort((a, b) => a.updatedAt - b.updatedAt)
 
   return (
     <Show
