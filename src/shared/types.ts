@@ -79,7 +79,12 @@ export interface AppState {
 export const DEFAULT_SETTINGS: AppSettings = {
   terminal: {
     fontSize: 14,
-    fontFamily: '"MonaspiceKr Nerd Font Mono", Menlo, Consolas, monospace',
+    fontFamily:
+      process.platform === 'darwin'
+        ? 'Menlo'
+        : process.platform === 'win32'
+          ? 'Consolas'
+          : 'DejaVu Sans Mono',
     cursorBlink: true,
     defaultShell: ''
   },
