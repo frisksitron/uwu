@@ -1,145 +1,272 @@
 import { type ChildProcess, spawn } from 'node:child_process'
+import path from 'node:path'
 import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk/v2'
 import { type BrowserWindow, ipcMain } from 'electron'
+import treeKill from 'tree-kill'
 
-interface OpencodeInstance {
+interface SharedServer {
   client: OpencodeClient
   proc: ChildProcess
   abortController: AbortController
 }
 
-let nextPort = 14096
-const instances = new Map<string, OpencodeInstance>()
+let server: SharedServer | null = null
+let serverStartPromise: Promise<SharedServer> | null = null
+let eventForwardingStarted = false
+const SERVER_PORT = 14096
 
-export function killAllOpencodeServers(): void {
-  for (const [, instance] of instances) {
-    instance.abortController.abort()
-    instance.proc.kill()
+export async function killAllOpencodeServers(): Promise<void> {
+  if (!server) return
+  server.abortController.abort()
+  try {
+    await server.client.global.dispose()
+  } catch {
+    /* best effort */
   }
-  instances.clear()
+  if (server.proc?.pid) treeKill(server.proc.pid)
+  server = null
+  serverStartPromise = null
+  eventForwardingStarted = false
 }
 
-async function spawnServer(
-  projectPath: string,
-  port: number,
-  timeout = 10000
-): Promise<{ proc: ChildProcess; url: string }> {
-  const hostname = '127.0.0.1'
-  const proc = spawn('opencode', ['serve', `--hostname=${hostname}`, `--port=${port}`], {
-    cwd: projectPath,
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe']
-  })
+function spawnServer(port: number): ChildProcess {
+  return spawn(
+    'opencode',
+    [
+      '--print-logs',
+      '--log-level',
+      'WARN',
+      'serve',
+      '--hostname',
+      '127.0.0.1',
+      '--port',
+      String(port)
+    ],
+    {
+      shell: true,
+      env: { ...process.env, OPENCODE_CLIENT: 'desktop' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    }
+  )
+}
 
-  const url = await new Promise<string>((resolve, reject) => {
-    const id = setTimeout(() => {
-      reject(new Error(`Timeout waiting for opencode server after ${timeout}ms`))
-    }, timeout)
+async function tryConnectExisting(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${url}/global/health`, { signal: AbortSignal.timeout(2000) })
+    return res.ok
+  } catch {
+    return false
+  }
+}
 
-    let output = ''
-    proc.stdout?.on('data', (chunk: Buffer) => {
-      output += chunk.toString()
-      for (const line of output.split('\n')) {
-        if (line.startsWith('opencode server listening')) {
-          const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
-          if (match) {
-            clearTimeout(id)
-            resolve(match[1])
-            return
-          }
+async function ensureServer(): Promise<OpencodeClient> {
+  if (server) return server.client
+  if (!serverStartPromise) {
+    serverStartPromise = (async () => {
+      let proc: ChildProcess | undefined
+      try {
+        const abortController = new AbortController()
+        const url = `http://127.0.0.1:${SERVER_PORT}`
+
+        // If an orphaned server from a previous session is still running, reuse it
+        const existingAlive = await tryConnectExisting(url)
+        if (existingAlive) {
+          console.log('[opencode] Reusing existing server on port', SERVER_PORT)
+          const client = createOpencodeClient({ baseUrl: url })
+          const s: SharedServer = { client, proc: null as unknown as ChildProcess, abortController }
+          server = s
+          return s
         }
-      }
-    })
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      output += chunk.toString()
-    })
-    proc.on('exit', (code) => {
-      clearTimeout(id)
-      reject(new Error(`Server exited with code ${code}\n${output}`))
-    })
-    proc.on('error', (error) => {
-      clearTimeout(id)
-      reject(error)
-    })
-  })
 
-  return { proc, url }
+        proc = spawnServer(SERVER_PORT)
+
+        // Collect stderr for error diagnostics
+        let stderrOutput = ''
+        proc.stderr?.on('data', (chunk: Buffer) => {
+          stderrOutput += chunk.toString()
+        })
+
+        // Wait for the server to be ready by polling
+        await new Promise<void>((resolve, reject) => {
+          let poll: ReturnType<typeof setInterval>
+          const cleanup = () => {
+            clearInterval(poll)
+            clearTimeout(timeout)
+          }
+          const timeout = setTimeout(() => {
+            cleanup()
+            reject(new Error('opencode server start timeout'))
+          }, 30000)
+          proc?.on('error', (err) => {
+            cleanup()
+            reject(err)
+          })
+          proc?.on('exit', (code) => {
+            if (!server) {
+              cleanup()
+              const detail = stderrOutput.trim()
+              reject(
+                new Error(`opencode server exited with code ${code}${detail ? `\n${detail}` : ''}`)
+              )
+            }
+          })
+          poll = setInterval(async () => {
+            try {
+              const res = await fetch(`${url}/global/health`)
+              if (res.ok) {
+                cleanup()
+                resolve()
+              }
+            } catch {
+              /* server not ready yet */
+            }
+          }, 100)
+        })
+
+        const client = createOpencodeClient({ baseUrl: url })
+        const s: SharedServer = { client, proc, abortController }
+        server = s
+
+        proc.on('exit', () => {
+          if (server?.proc === proc) {
+            server = null
+            serverStartPromise = null
+            eventForwardingStarted = false
+          }
+        })
+
+        return s
+      } catch (err) {
+        // Kill the spawned process if startup failed to avoid zombies
+        if (proc?.pid) treeKill(proc.pid)
+        serverStartPromise = null
+        throw err
+      }
+    })()
+  }
+  const s = await serverStartPromise
+  return s.client
+}
+
+async function startGlobalEventForwarding(
+  mainWindow: BrowserWindow,
+  client: OpencodeClient,
+  signal: AbortSignal
+): Promise<void> {
+  try {
+    const { stream } = await client.global.event()
+    for await (const globalEvent of stream) {
+      if (signal.aborted || mainWindow.isDestroyed()) break
+      mainWindow.webContents.send('opencode:event', globalEvent.directory, globalEvent.payload)
+    }
+  } catch (err) {
+    if (!signal.aborted) {
+      console.error('[opencode] Global event stream error:', err)
+      eventForwardingStarted = false
+    }
+  }
+}
+
+/** Normalize directory paths to OS-native format (backslashes on Windows).
+ *  The opencode server's Filesystem.resolve() stores paths with backslashes,
+ *  but the session.list SQL filter uses the raw query param as-is.
+ *  Without this, forward-slash paths yield zero session matches on Windows. */
+function normDir(dir: string): string {
+  return path.resolve(dir)
 }
 
 export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
-  ipcMain.handle('opencode:start', async (_event, projectPath: string) => {
-    if (instances.has(projectPath)) {
-      return { status: 'ready' }
-    }
+  ipcMain.handle('opencode:start', async (_event, _projectPath: string) => {
     try {
-      const port = nextPort++
-      const { proc, url } = await spawnServer(projectPath, port)
-      const client = createOpencodeClient({ baseUrl: url })
-      const abortController = new AbortController()
-      instances.set(projectPath, { client, proc, abortController })
-
-      // Start event subscription in background
-      startEventForwarding(mainWindow, client, projectPath, abortController.signal)
-
+      const client = await ensureServer()
+      if (!eventForwardingStarted && server) {
+        eventForwardingStarted = true
+        startGlobalEventForwarding(mainWindow, client, server.abortController.signal)
+      }
       return { status: 'ready' }
     } catch (err) {
-      console.error(`[opencode] Failed to start server for ${projectPath}:`, err)
+      console.error('[opencode] Failed to start server:', err)
       return { status: 'error', error: String(err) }
     }
   })
 
-  ipcMain.handle('opencode:stop', async (_event, projectPath: string) => {
-    const instance = instances.get(projectPath)
-    if (!instance) return
-    instance.abortController.abort()
-    instance.proc.kill()
-    instances.delete(projectPath)
-  })
-
-  ipcMain.handle('opencode:status', async (_event, projectPath: string) => {
-    return instances.has(projectPath) ? 'ready' : 'stopped'
-  })
-
   ipcMain.handle('opencode:session-list', async (_event, projectPath: string) => {
-    const client = getClient(projectPath)
-    const result = await client.session.list()
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.session.list({ directory: normDir(projectPath) })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:session-list failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle('opencode:session-create', async (_event, projectPath: string, title?: string) => {
-    const client = getClient(projectPath)
-    const result = await client.session.create({ title })
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.session.create({ directory: normDir(projectPath), title })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:session-create failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle('opencode:session-get', async (_event, projectPath: string, sessionId: string) => {
-    const client = getClient(projectPath)
-    const result = await client.session.get({ sessionID: sessionId })
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.session.get({
+        sessionID: sessionId,
+        directory: normDir(projectPath)
+      })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:session-get failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle(
     'opencode:session-delete',
     async (_event, projectPath: string, sessionId: string) => {
-      const client = getClient(projectPath)
-      const result = await client.session.delete({ sessionID: sessionId })
-      return result.data
+      try {
+        const client = await ensureServer()
+        const result = await client.session.delete({
+          sessionID: sessionId,
+          directory: normDir(projectPath)
+        })
+        return result.data
+      } catch (err) {
+        throw new Error(`opencode:session-delete failed: ${(err as Error).message}`)
+      }
     }
   )
 
   ipcMain.handle(
     'opencode:session-abort',
     async (_event, projectPath: string, sessionId: string) => {
-      const client = getClient(projectPath)
-      const result = await client.session.abort({ sessionID: sessionId })
-      return result.data
+      try {
+        const client = await ensureServer()
+        const result = await client.session.abort({
+          sessionID: sessionId,
+          directory: normDir(projectPath)
+        })
+        return result.data
+      } catch (err) {
+        throw new Error(`opencode:session-abort failed: ${(err as Error).message}`)
+      }
     }
   )
 
   ipcMain.handle('opencode:messages', async (_event, projectPath: string, sessionId: string) => {
-    const client = getClient(projectPath)
-    const result = await client.session.messages({ sessionID: sessionId })
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.session.messages({
+        sessionID: sessionId,
+        directory: normDir(projectPath)
+      })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:messages failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle(
@@ -158,14 +285,19 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
         variant?: string
       }
     ) => {
-      const client = getClient(projectPath)
-      await client.session.promptAsync({
-        sessionID: sessionId,
-        parts: payload.parts,
-        model: payload.model,
-        agent: payload.agent,
-        variant: payload.variant
-      })
+      try {
+        const client = await ensureServer()
+        await client.session.promptAsync({
+          sessionID: sessionId,
+          directory: normDir(projectPath),
+          parts: payload.parts,
+          model: payload.model,
+          agent: payload.agent,
+          variant: payload.variant
+        })
+      } catch (err) {
+        throw new Error(`opencode:send-message failed: ${(err as Error).message}`)
+      }
     }
   )
 
@@ -178,53 +310,86 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       permissionId: string,
       response: 'once' | 'always' | 'reject'
     ) => {
-      const client = getClient(projectPath)
-      await client.permission.respond({
-        sessionID: sessionId,
-        permissionID: permissionId,
-        response
-      })
+      try {
+        const client = await ensureServer()
+        await client.permission.respond({
+          sessionID: sessionId,
+          permissionID: permissionId,
+          directory: normDir(projectPath),
+          response
+        })
+      } catch (err) {
+        throw new Error(`opencode:permission-respond failed: ${(err as Error).message}`)
+      }
     }
   )
 
   ipcMain.handle(
     'opencode:question-reply',
     async (_event, projectPath: string, requestId: string, answers: Array<Array<string>>) => {
-      const client = getClient(projectPath)
-      await client.question.reply({ requestID: requestId, answers })
+      try {
+        const client = await ensureServer()
+        await client.question.reply({
+          requestID: requestId,
+          directory: normDir(projectPath),
+          answers
+        })
+      } catch (err) {
+        throw new Error(`opencode:question-reply failed: ${(err as Error).message}`)
+      }
     }
   )
 
   ipcMain.handle(
     'opencode:question-reject',
     async (_event, projectPath: string, requestId: string) => {
-      const client = getClient(projectPath)
-      await client.question.reject({ requestID: requestId })
+      try {
+        const client = await ensureServer()
+        await client.question.reject({ requestID: requestId, directory: normDir(projectPath) })
+      } catch (err) {
+        throw new Error(`opencode:question-reject failed: ${(err as Error).message}`)
+      }
     }
   )
 
   ipcMain.handle('opencode:providers', async (_event, projectPath: string) => {
-    const client = getClient(projectPath)
-    const result = await client.provider.list()
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.provider.list({ directory: normDir(projectPath) })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:providers failed: ${(err as Error).message}`)
+    }
   })
 
-  ipcMain.handle('opencode:config', async (_event, projectPath: string) => {
-    const client = getClient(projectPath)
-    const result = await client.config.get()
-    return result.data
+  ipcMain.handle('opencode:config', async (_event, _projectPath: string) => {
+    try {
+      const client = await ensureServer()
+      const result = await client.config.get()
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:config failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle('opencode:agents', async (_event, projectPath: string) => {
-    const client = getClient(projectPath)
-    const result = await client.app.agents()
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.app.agents({ directory: normDir(projectPath) })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:agents failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle('opencode:commands', async (_event, projectPath: string) => {
-    const client = getClient(projectPath)
-    const result = await client.command.list()
-    return result.data
+    try {
+      const client = await ensureServer()
+      const result = await client.command.list({ directory: normDir(projectPath) })
+      return result.data
+    } catch (err) {
+      throw new Error(`opencode:commands failed: ${(err as Error).message}`)
+    }
   })
 
   ipcMain.handle(
@@ -239,41 +404,20 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       agent?: string,
       variant?: string
     ) => {
-      const client = getClient(projectPath)
-      await client.session.command({
-        sessionID: sessionId,
-        command,
-        arguments: args,
-        model,
-        agent,
-        variant
-      })
+      try {
+        const client = await ensureServer()
+        await client.session.command({
+          sessionID: sessionId,
+          directory: normDir(projectPath),
+          command,
+          arguments: args,
+          model,
+          agent,
+          variant
+        })
+      } catch (err) {
+        throw new Error(`opencode:session-command failed: ${(err as Error).message}`)
+      }
     }
   )
-}
-
-function getClient(projectPath: string): OpencodeClient {
-  const instance = instances.get(projectPath)
-  if (!instance) throw new Error(`No opencode server running for ${projectPath}`)
-  return instance.client
-}
-
-async function startEventForwarding(
-  mainWindow: BrowserWindow,
-  client: OpencodeClient,
-  projectPath: string,
-  signal: AbortSignal
-): Promise<void> {
-  try {
-    const { stream } = await client.event.subscribe()
-    for await (const event of stream) {
-      if (signal.aborted) break
-      if (mainWindow.isDestroyed()) break
-      mainWindow.webContents.send('opencode:event', projectPath, event)
-    }
-  } catch (err) {
-    if (!signal.aborted) {
-      console.error(`[opencode] Event stream error for ${projectPath}:`, err)
-    }
-  }
 }

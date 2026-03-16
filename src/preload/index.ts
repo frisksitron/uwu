@@ -92,20 +92,23 @@ const windowAPI = {
   minimize: (): void => ipcRenderer.send('window:minimize'),
   maximize: (): void => ipcRenderer.send('window:maximize'),
   close: (): void => ipcRenderer.send('window:close'),
+  confirmClose: (): void => ipcRenderer.send('window:close-confirmed'),
   isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:is-maximized'),
   onMaximizedChange: (cb: (maximized: boolean) => void): (() => void) => {
     const handler = (_: unknown, val: boolean): void => cb(val)
     ipcRenderer.on('window:maximized-change', handler)
     return () => ipcRenderer.off('window:maximized-change', handler)
+  },
+  onCloseRequested: (cb: () => void): (() => void) => {
+    const handler = (): void => cb()
+    ipcRenderer.on('window:close-requested', handler)
+    return () => ipcRenderer.removeListener('window:close-requested', handler)
   }
 }
 
 const opencodeAPI = {
   start: (projectPath: string): Promise<{ status: string; error?: string }> =>
     ipcRenderer.invoke('opencode:start', projectPath),
-  stop: (projectPath: string): Promise<void> => ipcRenderer.invoke('opencode:stop', projectPath),
-  status: (projectPath: string): Promise<string> =>
-    ipcRenderer.invoke('opencode:status', projectPath),
   sessionList: (projectPath: string): Promise<unknown> =>
     ipcRenderer.invoke('opencode:session-list', projectPath),
   sessionCreate: (projectPath: string, title?: string): Promise<unknown> =>
@@ -184,6 +187,12 @@ const opencodeAPI = {
       cb(projectPath, event)
     ipcRenderer.on('opencode:event', handler)
     return () => ipcRenderer.removeListener('opencode:event', handler)
+  },
+  onEventError: (cb: (projectPath: string, error: string) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, projectPath: string, error: string): void =>
+      cb(projectPath, error)
+    ipcRenderer.on('opencode:event-error', handler)
+    return () => ipcRenderer.removeListener('opencode:event-error', handler)
   }
 }
 
@@ -215,8 +224,8 @@ const updaterAPI = {
     ipcRenderer.on('updater:downloaded', handler)
     return () => ipcRenderer.removeListener('updater:downloaded', handler)
   },
-  onError: (cb: (message: string) => void): (() => void) => {
-    const handler = (_: unknown, message: string): void => cb(message)
+  onError: (cb: (error: { message: string; stack?: string }) => void): (() => void) => {
+    const handler = (_: unknown, error: { message: string; stack?: string }): void => cb(error)
     ipcRenderer.on('updater:error', handler)
     return () => ipcRenderer.removeListener('updater:error', handler)
   }

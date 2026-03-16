@@ -56,7 +56,8 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   let lastScrollTop = 0
 
   onMount(async () => {
-    await startServer(props.projectPath)
+    const ok = await startServer(props.projectPath)
+    if (!ok) return
     await Promise.all([loadSessions(props.projectPath), loadSlashCommands(props.projectPath)])
     if (props.sessionId) {
       await loadMessages(props.projectPath, props.sessionId)

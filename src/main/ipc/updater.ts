@@ -28,7 +28,10 @@ export function setupUpdaterIpc(mainWindow: BrowserWindow): void {
   })
 
   autoUpdater.on('error', (err) => {
-    mainWindow.webContents.send('updater:error', err.message)
+    mainWindow.webContents.send('updater:error', {
+      message: err.message,
+      stack: err.stack
+    })
   })
 
   ipcMain.handle('updater:check', () => autoUpdater.checkForUpdates())

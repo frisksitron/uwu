@@ -184,11 +184,6 @@ export async function startServer(projectPath: string): Promise<boolean> {
   return false
 }
 
-export async function stopServer(projectPath: string): Promise<void> {
-  await window.opencodeAPI.stop(projectPath)
-  setState('servers', projectPath, 'stopped')
-}
-
 export async function loadSessions(projectPath: string): Promise<void> {
   const data = (await window.opencodeAPI.sessionList(projectPath)) as Array<{
     id: string
@@ -517,7 +512,10 @@ export async function rejectQuestion(projectPath: string, requestId: string): Pr
 }
 
 export function initEventListener(): () => void {
-  return window.opencodeAPI.onEvent((_projectPath: string, rawEvent: unknown) => {
+  const cleanupError = window.opencodeAPI.onEventError((projectPath: string, _error: string) => {
+    setState('servers', projectPath, 'error')
+  })
+  const cleanupEvent = window.opencodeAPI.onEvent((_projectPath: string, rawEvent: unknown) => {
     const event = rawEvent as { type: string; properties: Record<string, unknown> }
     if (!event?.type) return
 
@@ -771,6 +769,10 @@ export function initEventListener(): () => void {
       }
     }
   })
+  return () => {
+    cleanupError()
+    cleanupEvent()
+  }
 }
 
 function upsertPart(raw: RawPart & { sessionID: string }): void {

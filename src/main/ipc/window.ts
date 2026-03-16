@@ -1,12 +1,27 @@
 import { type BrowserWindow, ipcMain } from 'electron'
 
+const CLOSE_TIMEOUT_MS = 2000
+
 export function setupWindowIpc(mainWindow: BrowserWindow): void {
+  let closeTimeout: ReturnType<typeof setTimeout> | undefined
   ipcMain.on('window:minimize', () => mainWindow.minimize())
   ipcMain.on('window:maximize', () => {
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
   })
-  ipcMain.on('window:close', () => mainWindow.close())
+  ipcMain.on('window:close', () => {
+    // Ask renderer to save state before closing
+    if (mainWindow.isDestroyed()) return
+    mainWindow.webContents.send('window:close-requested')
+    // Safety timeout in case renderer never responds
+    closeTimeout = setTimeout(() => {
+      if (!mainWindow.isDestroyed()) mainWindow.close()
+    }, CLOSE_TIMEOUT_MS)
+  })
+  ipcMain.on('window:close-confirmed', () => {
+    clearTimeout(closeTimeout)
+    if (!mainWindow.isDestroyed()) mainWindow.close()
+  })
   ipcMain.handle('window:is-maximized', () => mainWindow.isMaximized())
 
   mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximized-change', true))

@@ -67,14 +67,14 @@ interface WindowAPI {
   minimize: () => void
   maximize: () => void
   close: () => void
+  confirmClose: () => void
   isMaximized: () => Promise<boolean>
   onMaximizedChange: (cb: (maximized: boolean) => void) => () => void
+  onCloseRequested: (cb: () => void) => () => void
 }
 
 interface OpencodeAPI {
   start: (projectPath: string) => Promise<{ status: string; error?: string }>
-  stop: (projectPath: string) => Promise<void>
-  status: (projectPath: string) => Promise<string>
   sessionList: (projectPath: string) => Promise<unknown>
   sessionCreate: (projectPath: string, title?: string) => Promise<unknown>
   sessionGet: (projectPath: string, sessionId: string) => Promise<unknown>
@@ -120,6 +120,7 @@ interface OpencodeAPI {
     variant?: string
   ) => Promise<void>
   onEvent: (cb: (projectPath: string, event: unknown) => void) => () => void
+  onEventError: (cb: (projectPath: string, error: string) => void) => () => void
 }
 
 interface UpdaterAPI {
@@ -130,7 +131,7 @@ interface UpdaterAPI {
   onNotAvailable: (cb: () => void) => () => void
   onProgress: (cb: (progress: unknown) => void) => () => void
   onDownloaded: (cb: (info: unknown) => void) => () => void
-  onError: (cb: (message: string) => void) => () => void
+  onError: (cb: (error: { message: string; stack?: string }) => void) => () => void
 }
 
 declare global {
