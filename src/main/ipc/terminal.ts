@@ -1,6 +1,8 @@
+import { type } from 'arktype'
 import { type BrowserWindow, ipcMain } from 'electron'
 import Store from 'electron-store'
 import * as pty from 'node-pty'
+import { TerminalCacheSchema } from '../../shared/schemas'
 
 const terminals = new Map<number, pty.IPty>()
 let nextTermId = 1
@@ -107,23 +109,28 @@ export function setupTerminalIpc(mainWindow: BrowserWindow): void {
     defaults: {}
   })
 
-  ipcMain.handle('terminal-cache:save', (_event, data: Record<string, unknown>) => {
-    cacheStore.store = data
+  ipcMain.handle('terminal-cache:save', (_event, data: unknown) => {
+    const result = TerminalCacheSchema(data)
+    if (result instanceof type.errors) return
+    cacheStore.store = result
   })
 
   ipcMain.handle('terminal-cache:load', () => {
+    const raw = TerminalCacheSchema(cacheStore.store)
+    if (raw instanceof type.errors) {
+      cacheStore.store = {}
+      return {}
+    }
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
     const now = Date.now()
-    const data = cacheStore.store as Record<string, { savedAt?: number }>
     let changed = false
-    for (const key of Object.keys(data)) {
-      const savedAt = data[key]?.savedAt
-      if (savedAt && now - savedAt > SEVEN_DAYS_MS) {
-        delete data[key]
+    for (const key of Object.keys(raw)) {
+      if (now - raw[key].savedAt > SEVEN_DAYS_MS) {
+        delete raw[key]
         changed = true
       }
     }
-    if (changed) cacheStore.store = data
-    return data
+    if (changed) cacheStore.store = raw
+    return raw
   })
 }

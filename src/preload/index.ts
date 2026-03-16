@@ -197,9 +197,11 @@ const opencodeAPI = {
 }
 
 const settingsAPI = {
-  load: (): Promise<import('../shared/types').AppSettings> => ipcRenderer.invoke('settings:load'),
+  load: (): Promise<{ data: import('../shared/types').AppSettings; corrupted: boolean }> =>
+    ipcRenderer.invoke('settings:load'),
   save: (settings: import('../shared/types').AppSettings): Promise<void> =>
     ipcRenderer.invoke('settings:save', settings),
+  reset: (): Promise<import('../shared/types').AppSettings> => ipcRenderer.invoke('settings:reset'),
   getMonoFonts: (): Promise<string[]> => ipcRenderer.invoke('settings:get-mono-fonts')
 }
 

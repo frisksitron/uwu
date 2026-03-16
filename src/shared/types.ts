@@ -1,16 +1,16 @@
-export interface PersistentTerminal {
-  id: string
-  label: string
-  worktreePath?: string
-  customLabel?: boolean
-}
+export type {
+  AppSettings,
+  KeyBinding,
+  KeyboardShortcuts,
+  OpencodeInstance,
+  PersistentTerminal,
+  ProjectEntry,
+  TerminalCacheEntry,
+  TerminalSettings,
+  WindowSettings
+} from './schemas'
 
-export interface OpencodeInstance {
-  id: string
-  sessionId?: string
-  label: string
-  worktreePath?: string
-}
+import type { AppSettings, OpencodeInstance, PersistentTerminal } from './schemas'
 
 // Runtime only — returned from main process, not persisted
 export interface WorktreeInfo {
@@ -38,12 +38,6 @@ export interface Project {
   // Runtime-only (not persisted)
   isGit?: boolean
   worktrees?: WorktreeInfo[]
-}
-
-export interface TerminalCacheEntry {
-  lastOutput: string
-  title: string
-  savedAt: number
 }
 
 // Discriminated union for tabs
@@ -80,39 +74,6 @@ export interface AppState {
   projects: Project[]
   tabs: Tab[]
   activeTabId: string | null
-}
-
-export interface TerminalSettings {
-  fontSize: number
-  fontFamily: string
-  cursorBlink: boolean
-  defaultShell: string
-}
-
-export interface WindowSettings {
-  rememberBounds: boolean
-  bounds?: { x: number; y: number; width: number; height: number }
-}
-
-export interface KeyBinding {
-  key: string
-  ctrlKey: boolean
-  shiftKey: boolean
-  altKey: boolean
-}
-
-export interface KeyboardShortcuts {
-  cycleTabForward: KeyBinding
-  cycleTabBackward: KeyBinding
-  toggleSidebar: KeyBinding
-  closeTab: KeyBinding
-  openSettings: KeyBinding
-}
-
-export interface AppSettings {
-  terminal: TerminalSettings
-  window: WindowSettings
-  shortcuts: KeyboardShortcuts
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

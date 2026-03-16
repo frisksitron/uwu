@@ -135,8 +135,9 @@ interface UpdaterAPI {
 }
 
 interface SettingsAPI {
-  load: () => Promise<import('../shared/types').AppSettings>
+  load: () => Promise<{ data: import('../shared/types').AppSettings; corrupted: boolean }>
   save: (settings: import('../shared/types').AppSettings) => Promise<void>
+  reset: () => Promise<import('../shared/types').AppSettings>
   getMonoFonts: () => Promise<string[]>
 }
 

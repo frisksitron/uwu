@@ -25,6 +25,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@opencode-ai/sdk": "^1.2.26",
+    "arktype": "^2.2.0",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.3.9",
     "lucide-solid": "^0.577.0",

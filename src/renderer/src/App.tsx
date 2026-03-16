@@ -9,7 +9,14 @@ import TitleBar from './components/TitleBar'
 import UpdateBanner from './components/UpdateBanner'
 import { initEventListener } from './opencodeStore'
 import { clearOutput } from './outputStore'
-import { loadSettings, matchesBinding, settings } from './settingsStore'
+import {
+  dismissCorrupted,
+  loadSettings,
+  matchesBinding,
+  resetSettings,
+  settings,
+  settingsCorrupted
+} from './settingsStore'
 import { loadProjects, saveProjects, setStore, store, visualTabOrder } from './store'
 import type { OpencodeTab, PersistentTab, Project, Tab, TerminalCacheEntry } from './types'
 
@@ -130,6 +137,11 @@ export default function App(): JSX.Element {
   }
 
   function closeTab(tabId: string): void {
+    const timer = idleTimers.get(tabId)
+    if (timer) {
+      clearTimeout(timer)
+      idleTimers.delete(tabId)
+    }
     clearOutput(tabId)
     const remaining = store.tabs.filter((t) => t.tabId !== tabId)
     setStore('tabs', remaining)
@@ -226,6 +238,27 @@ export default function App(): JSX.Element {
         onOpenSettings={() => setShowSettings(true)}
       />
       <UpdateBanner />
+      <Show when={settingsCorrupted()}>
+        <div class="flex items-center justify-between px-4 py-2 bg-sidebar border-b border-border text-content text-sm shrink-0">
+          <span>Settings file is corrupted and could not be loaded.</span>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="px-3 py-1 rounded bg-accent text-white text-xs font-medium hover:opacity-90 transition-opacity"
+              onClick={() => resetSettings()}
+            >
+              Reset settings
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1 rounded bg-hover text-content text-xs font-medium hover:bg-active transition-colors"
+              onClick={() => dismissCorrupted()}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </Show>
       <div class="flex flex-1 overflow-hidden">
         <div classList={{ hidden: sidebarCollapsed() }} class="flex">
           <Sidebar
