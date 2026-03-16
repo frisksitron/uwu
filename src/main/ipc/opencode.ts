@@ -1,4 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { createServer } from 'node:net'
 import path from 'node:path'
 import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk/v2'
 import { type BrowserWindow, ipcMain } from 'electron'
@@ -6,14 +8,13 @@ import treeKill from 'tree-kill'
 
 interface SharedServer {
   client: OpencodeClient
-  proc: ChildProcess
+  proc: ChildProcess | null
   abortController: AbortController
 }
 
 let server: SharedServer | null = null
 let serverStartPromise: Promise<SharedServer> | null = null
 let eventForwardingStarted = false
-const SERVER_PORT = 14096
 
 export async function killAllOpencodeServers(): Promise<void> {
   if (!server) return
@@ -29,7 +30,28 @@ export async function killAllOpencodeServers(): Promise<void> {
   eventForwardingStarted = false
 }
 
-function spawnServer(port: number): ChildProcess {
+async function getAvailablePort(): Promise<number> {
+  const fromEnv = process.env.OPENCODE_PORT
+  if (fromEnv) {
+    const parsed = Number.parseInt(fromEnv, 10)
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return new Promise<number>((resolve, reject) => {
+    const srv = createServer()
+    srv.on('error', reject)
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address()
+      if (typeof addr !== 'object' || !addr) {
+        srv.close()
+        reject(new Error('Failed to get port'))
+        return
+      }
+      srv.close(() => resolve(addr.port))
+    })
+  })
+}
+
+function spawnServer(port: number, password: string): ChildProcess {
   return spawn(
     'opencode',
     [
@@ -44,16 +66,28 @@ function spawnServer(port: number): ChildProcess {
     ],
     {
       shell: true,
-      env: { ...process.env, OPENCODE_CLIENT: 'desktop' },
+      env: {
+        ...process.env,
+        OPENCODE_CLIENT: 'uwu',
+        OPENCODE_SERVER_USERNAME: 'uwu',
+        OPENCODE_SERVER_PASSWORD: password
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true
     }
   )
 }
 
-async function tryConnectExisting(url: string): Promise<boolean> {
+async function checkHealth(url: string, password?: string): Promise<boolean> {
   try {
-    const res = await fetch(`${url}/global/health`, { signal: AbortSignal.timeout(2000) })
+    const headers: Record<string, string> = {}
+    if (password) {
+      headers.authorization = `Basic ${Buffer.from(`uwu:${password}`).toString('base64')}`
+    }
+    const res = await fetch(`${url}/global/health`, {
+      headers,
+      signal: AbortSignal.timeout(3000)
+    })
     return res.ok
   } catch {
     return false
@@ -67,19 +101,12 @@ async function ensureServer(): Promise<OpencodeClient> {
       let proc: ChildProcess | undefined
       try {
         const abortController = new AbortController()
-        const url = `http://127.0.0.1:${SERVER_PORT}`
+        const port = await getAvailablePort()
+        const password = randomUUID()
+        const url = `http://127.0.0.1:${port}`
 
-        // If an orphaned server from a previous session is still running, reuse it
-        const existingAlive = await tryConnectExisting(url)
-        if (existingAlive) {
-          console.log('[opencode] Reusing existing server on port', SERVER_PORT)
-          const client = createOpencodeClient({ baseUrl: url })
-          const s: SharedServer = { client, proc: null as unknown as ChildProcess, abortController }
-          server = s
-          return s
-        }
-
-        proc = spawnServer(SERVER_PORT)
+        proc = spawnServer(port, password)
+        console.log('[opencode] Spawning server on port', port)
 
         // Collect stderr for error diagnostics
         let stderrOutput = ''
@@ -87,44 +114,39 @@ async function ensureServer(): Promise<OpencodeClient> {
           stderrOutput += chunk.toString()
         })
 
-        // Wait for the server to be ready by polling
-        await new Promise<void>((resolve, reject) => {
-          let poll: ReturnType<typeof setInterval>
-          const cleanup = () => {
-            clearInterval(poll)
-            clearTimeout(timeout)
+        const ready = async () => {
+          while (true) {
+            await new Promise((r) => setTimeout(r, 100))
+            if (await checkHealth(url, password)) return
           }
-          const timeout = setTimeout(() => {
-            cleanup()
-            reject(new Error('opencode server start timeout'))
-          }, 30000)
-          proc?.on('error', (err) => {
-            cleanup()
-            reject(err)
-          })
-          proc?.on('exit', (code) => {
-            if (!server) {
-              cleanup()
-              const detail = stderrOutput.trim()
-              reject(
-                new Error(`opencode server exited with code ${code}${detail ? `\n${detail}` : ''}`)
-              )
-            }
-          })
-          poll = setInterval(async () => {
-            try {
-              const res = await fetch(`${url}/global/health`)
-              if (res.ok) {
-                cleanup()
-                resolve()
-              }
-            } catch {
-              /* server not ready yet */
-            }
-          }, 100)
-        })
+        }
 
-        const client = createOpencodeClient({ baseUrl: url })
+        const terminated = async () => {
+          const { code, signal } = await new Promise<{
+            code: number | null
+            signal: string | null
+          }>((resolve) => {
+            proc?.on('exit', (c, s) => resolve({ code: c, signal: s }))
+          })
+          const detail = stderrOutput.trim()
+          throw new Error(
+            `opencode server terminated before becoming healthy (code=${code ?? 'unknown'} signal=${signal ?? 'unknown'})${detail ? `\n${detail}` : ''}`
+          )
+        }
+
+        await Promise.race([
+          ready(),
+          terminated(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('opencode server start timeout')), 30_000)
+          )
+        ])
+
+        const authHeader = `Basic ${Buffer.from(`uwu:${password}`).toString('base64')}`
+        const client = createOpencodeClient({
+          baseUrl: url,
+          headers: { authorization: authHeader }
+        })
         const s: SharedServer = { client, proc, abortController }
         server = s
 
@@ -197,7 +219,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       const result = await client.session.list({ directory: normDir(projectPath) })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:session-list failed: ${(err as Error).message}`)
+      throw new Error(`opencode:session-list failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -207,7 +229,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       const result = await client.session.create({ directory: normDir(projectPath), title })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:session-create failed: ${(err as Error).message}`)
+      throw new Error(`opencode:session-create failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -220,7 +242,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:session-get failed: ${(err as Error).message}`)
+      throw new Error(`opencode:session-get failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -235,7 +257,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
         })
         return result.data
       } catch (err) {
-        throw new Error(`opencode:session-delete failed: ${(err as Error).message}`)
+        throw new Error(`opencode:session-delete failed: ${(err as Error).message}`, { cause: err })
       }
     }
   )
@@ -251,7 +273,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
         })
         return result.data
       } catch (err) {
-        throw new Error(`opencode:session-abort failed: ${(err as Error).message}`)
+        throw new Error(`opencode:session-abort failed: ${(err as Error).message}`, { cause: err })
       }
     }
   )
@@ -265,7 +287,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:messages failed: ${(err as Error).message}`)
+      throw new Error(`opencode:messages failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -296,7 +318,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
           variant: payload.variant
         })
       } catch (err) {
-        throw new Error(`opencode:send-message failed: ${(err as Error).message}`)
+        throw new Error(`opencode:send-message failed: ${(err as Error).message}`, { cause: err })
       }
     }
   )
@@ -319,7 +341,9 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
           response
         })
       } catch (err) {
-        throw new Error(`opencode:permission-respond failed: ${(err as Error).message}`)
+        throw new Error(`opencode:permission-respond failed: ${(err as Error).message}`, {
+          cause: err
+        })
       }
     }
   )
@@ -335,7 +359,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
           answers
         })
       } catch (err) {
-        throw new Error(`opencode:question-reply failed: ${(err as Error).message}`)
+        throw new Error(`opencode:question-reply failed: ${(err as Error).message}`, { cause: err })
       }
     }
   )
@@ -347,7 +371,9 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
         const client = await ensureServer()
         await client.question.reject({ requestID: requestId, directory: normDir(projectPath) })
       } catch (err) {
-        throw new Error(`opencode:question-reject failed: ${(err as Error).message}`)
+        throw new Error(`opencode:question-reject failed: ${(err as Error).message}`, {
+          cause: err
+        })
       }
     }
   )
@@ -358,7 +384,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       const result = await client.provider.list({ directory: normDir(projectPath) })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:providers failed: ${(err as Error).message}`)
+      throw new Error(`opencode:providers failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -368,7 +394,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       const result = await client.config.get()
       return result.data
     } catch (err) {
-      throw new Error(`opencode:config failed: ${(err as Error).message}`)
+      throw new Error(`opencode:config failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -378,7 +404,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       const result = await client.app.agents({ directory: normDir(projectPath) })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:agents failed: ${(err as Error).message}`)
+      throw new Error(`opencode:agents failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -388,7 +414,7 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
       const result = await client.command.list({ directory: normDir(projectPath) })
       return result.data
     } catch (err) {
-      throw new Error(`opencode:commands failed: ${(err as Error).message}`)
+      throw new Error(`opencode:commands failed: ${(err as Error).message}`, { cause: err })
     }
   })
 
@@ -416,7 +442,9 @@ export function setupOpencodeIpc(mainWindow: BrowserWindow): void {
           variant
         })
       } catch (err) {
-        throw new Error(`opencode:session-command failed: ${(err as Error).message}`)
+        throw new Error(`opencode:session-command failed: ${(err as Error).message}`, {
+          cause: err
+        })
       }
     }
   )

@@ -56,8 +56,22 @@ function createWindow(): void {
   }
 }
 
+function ensureLoopbackNoProxy(): void {
+  const loopback = ['127.0.0.1', 'localhost', '::1']
+  for (const key of ['NO_PROXY', 'no_proxy']) {
+    const existing = process.env[key]
+    const entries = existing ? existing.split(',').map((s) => s.trim()) : []
+    for (const addr of loopback) {
+      if (!entries.includes(addr)) entries.push(addr)
+    }
+    process.env[key] = entries.join(',')
+  }
+}
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.frisksitron.uwu')
+  app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>')
+  ensureLoopbackNoProxy()
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   for (const [name, setup] of [
     ['project', setupProjectIpc],
