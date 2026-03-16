@@ -196,6 +196,13 @@ const opencodeAPI = {
   }
 }
 
+const settingsAPI = {
+  load: (): Promise<import('../shared/types').AppSettings> => ipcRenderer.invoke('settings:load'),
+  save: (settings: import('../shared/types').AppSettings): Promise<void> =>
+    ipcRenderer.invoke('settings:save', settings),
+  getMonoFonts: (): Promise<string[]> => ipcRenderer.invoke('settings:get-mono-fonts')
+}
+
 const updaterAPI = {
   check: (): Promise<unknown> => ipcRenderer.invoke('updater:check'),
   install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
@@ -239,6 +246,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('worktreeAPI', worktreeAPI)
     contextBridge.exposeInMainWorld('windowAPI', windowAPI)
     contextBridge.exposeInMainWorld('opencodeAPI', opencodeAPI)
+    contextBridge.exposeInMainWorld('settingsAPI', settingsAPI)
     contextBridge.exposeInMainWorld('updaterAPI', updaterAPI)
   } catch (error) {
     console.error(error)
@@ -256,6 +264,8 @@ if (process.contextIsolated) {
   window.windowAPI = windowAPI
   // @ts-expect-error (window.opencodeAPI is not in the declared Window type)
   window.opencodeAPI = opencodeAPI
+  // @ts-expect-error (window.settingsAPI is not in the declared Window type)
+  window.settingsAPI = settingsAPI
   // @ts-expect-error (window.updaterAPI is not in the declared Window type)
   window.updaterAPI = updaterAPI
 }

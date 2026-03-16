@@ -1,10 +1,11 @@
-import { Maximize2, Minus, Square, X } from 'lucide-solid'
+import { Maximize2, Minus, Settings, Square, X } from 'lucide-solid'
 import { createSignal, type JSX, onCleanup, onMount } from 'solid-js'
 import appIcon from '../../../../resources/icon.png'
 
 interface TitleBarProps {
   collapsed: boolean
   onToggleCollapsed: () => void
+  onOpenSettings: () => void
 }
 
 export default function TitleBar(props: TitleBarProps): JSX.Element {
@@ -42,6 +43,14 @@ export default function TitleBar(props: TitleBarProps): JSX.Element {
         class="flex items-center"
         style={{ '-webkit-app-region': 'no-drag' } as JSX.CSSProperties}
       >
+        <button
+          type="button"
+          class="flex items-center justify-center w-10 h-8 text-heading hover:bg-active transition-colors cursor-pointer"
+          onClick={() => props.onOpenSettings()}
+          title="Settings (Ctrl+,)"
+        >
+          <Settings size={14} />
+        </button>
         <button
           type="button"
           class="flex items-center justify-center w-10 h-8 text-heading hover:bg-active transition-colors cursor-pointer"

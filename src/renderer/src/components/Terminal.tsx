@@ -1,8 +1,9 @@
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal as XTerm } from '@xterm/xterm'
-import { createEffect, type JSX, onCleanup, onMount } from 'solid-js'
+import { createEffect, type JSX, on, onCleanup, onMount } from 'solid-js'
 import '@xterm/xterm/css/xterm.css'
 import { clearOutput, pushOutput } from '../outputStore'
+import { matchesBinding, settings } from '../settingsStore'
 import { readTerminalBuffer } from '../terminalCache'
 
 interface TerminalProps {
@@ -45,9 +46,9 @@ export default function Terminal(props: TerminalProps): JSX.Element {
 
   onMount(() => {
     term = new XTerm({
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: '"MonaspiceKr Nerd Font Mono", Menlo, Consolas, monospace',
+      cursorBlink: settings.terminal.cursorBlink,
+      fontSize: settings.terminal.fontSize,
+      fontFamily: settings.terminal.fontFamily,
       theme: {
         background: '#fff8fc', // --color-terminal
         foreground: '#6b3d58', // darker shade of --color-content
@@ -77,14 +78,33 @@ export default function Terminal(props: TerminalProps): JSX.Element {
     term.loadAddon(fitAddon)
     term.open(containerRef)
 
-    // Let certain Ctrl shortcuts pass through to the global keydown handler
+    // Let app shortcuts pass through to the global keydown handler
     term.attachCustomKeyEventHandler((e) => {
-      if (e.ctrlKey && e.key === 'Tab') return false
-      if (e.ctrlKey && e.key === 'b') return false
+      for (const binding of Object.values(settings.shortcuts)) {
+        if (matchesBinding(e, binding)) return false
+      }
       return true
     })
 
     fitAddon.fit()
+
+    // React to live settings changes
+    createEffect(
+      on(
+        () => ({
+          fontSize: settings.terminal.fontSize,
+          fontFamily: settings.terminal.fontFamily,
+          cursorBlink: settings.terminal.cursorBlink
+        }),
+        (opts) => {
+          term.options.fontSize = opts.fontSize
+          term.options.fontFamily = opts.fontFamily
+          term.options.cursorBlink = opts.cursorBlink
+          fitAddon.fit()
+        },
+        { defer: true }
+      )
+    )
 
     // Mutable cleanup state — populated after async init
     let id: number | undefined

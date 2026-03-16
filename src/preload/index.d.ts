@@ -134,6 +134,12 @@ interface UpdaterAPI {
   onError: (cb: (error: { message: string; stack?: string }) => void) => () => void
 }
 
+interface SettingsAPI {
+  load: () => Promise<import('../shared/types').AppSettings>
+  save: (settings: import('../shared/types').AppSettings) => Promise<void>
+  getMonoFonts: () => Promise<string[]>
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -143,6 +149,7 @@ declare global {
     worktreeAPI: WorktreeAPI
     windowAPI: WindowAPI
     opencodeAPI: OpencodeAPI
+    settingsAPI: SettingsAPI
     updaterAPI: UpdaterAPI
   }
 }

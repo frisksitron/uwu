@@ -1,19 +1,35 @@
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
 import { killAllOpencodeServers, setupOpencodeIpc } from './ipc/opencode'
 import { setupProjectIpc } from './ipc/project'
+import { getSettingsStore, setupSettingsIpc } from './ipc/settings'
 import { killAllTerminals, setupTerminalIpc } from './ipc/terminal'
 import { setupUpdaterIpc } from './ipc/updater'
 import { setupWindowIpc } from './ipc/window'
 import { setupWorktreeIpc } from './ipc/worktree'
 
+function getSavedBounds(): { x: number; y: number; width: number; height: number } | undefined {
+  const s = getSettingsStore().get('settings')
+  if (!s.window.rememberBounds || !s.window.bounds) return undefined
+  const b = s.window.bounds
+  // Validate bounds are on a visible display
+  const displays = screen.getAllDisplays()
+  const visible = displays.some((d) => {
+    const { x, y, width, height } = d.workArea
+    return b.x + b.width > x && b.x < x + width && b.y + b.height > y && b.y < y + height
+  })
+  return visible ? b : undefined
+}
+
 function createWindow(): void {
+  const savedBounds = getSavedBounds()
   const mainWindow = new BrowserWindow({
     title: 'uwu — Unified Workspace Utility',
-    width: 900,
-    height: 670,
+    width: savedBounds?.width ?? 900,
+    height: savedBounds?.height ?? 670,
+    ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     show: false,
     frame: false,
     autoHideMenuBar: true,
@@ -74,6 +90,7 @@ app.whenReady().then(() => {
   ensureLoopbackNoProxy()
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
   for (const [name, setup] of [
+    ['settings', setupSettingsIpc],
     ['project', setupProjectIpc],
     ['worktree', setupWorktreeIpc]
   ] as const) {

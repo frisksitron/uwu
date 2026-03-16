@@ -1,4 +1,5 @@
 import { type BrowserWindow, ipcMain } from 'electron'
+import { getSettingsStore } from './settings'
 
 const CLOSE_TIMEOUT_MS = 2000
 
@@ -20,6 +21,13 @@ export function setupWindowIpc(mainWindow: BrowserWindow): void {
   })
   ipcMain.on('window:close-confirmed', () => {
     clearTimeout(closeTimeout)
+    // Save window bounds before closing
+    const store = getSettingsStore()
+    const s = store.get('settings')
+    if (s.window.rememberBounds && !mainWindow.isDestroyed()) {
+      s.window.bounds = mainWindow.getBounds()
+      store.set('settings', s)
+    }
     if (!mainWindow.isDestroyed()) mainWindow.close()
   })
   ipcMain.handle('window:is-maximized', () => mainWindow.isMaximized())
