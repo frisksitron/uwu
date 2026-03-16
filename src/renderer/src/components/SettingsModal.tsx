@@ -102,9 +102,9 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
     setDraft('shortcuts', name, { ...DEFAULT_SETTINGS.shortcuts[name] })
   }
 
-  function save(): void {
+  async function save(): Promise<void> {
     setSettings(structuredClone(unwrap(draft)))
-    saveSettings()
+    await saveSettings()
     props.onClose()
   }
 

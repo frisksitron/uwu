@@ -32,7 +32,8 @@ export function matchesBinding(e: KeyboardEvent, binding: KeyBinding): boolean {
     e.key.toLowerCase() === binding.key.toLowerCase() &&
     e.ctrlKey === binding.ctrlKey &&
     e.shiftKey === binding.shiftKey &&
-    e.altKey === binding.altKey
+    e.altKey === binding.altKey &&
+    !e.metaKey
   )
 }
 

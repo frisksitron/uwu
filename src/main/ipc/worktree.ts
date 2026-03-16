@@ -196,16 +196,4 @@ export function setupWorktreeIpc(): void {
       return syncFilesToWorktree(projectPath, worktreePath, files)
     }
   )
-
-  ipcMain.handle(
-    'worktree:read-scripts',
-    async (_event, worktreePath: string): Promise<Record<string, string>> => {
-      try {
-        const result = await detectProject(worktreePath)
-        return result?.scripts ?? {}
-      } catch {
-        return {}
-      }
-    }
-  )
 }

@@ -14,6 +14,8 @@ export function getSettingsStore(): Store<{ settings: AppSettings }> {
   return settingsStore
 }
 
+// Merges saved settings over defaults, only carrying forward keys that exist in defaults.
+// This ensures new keys get default values and removed keys are dropped on upgrade.
 // biome-ignore lint/suspicious/noExplicitAny: recursive merge needs any
 function deepMerge(defaults: any, saved: any): any {
   if (!saved || typeof saved !== 'object' || typeof defaults !== 'object') return defaults

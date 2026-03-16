@@ -1,6 +1,7 @@
 import { createMemo } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
-import type { AppState, Project } from './types'
+import type { ProjectEntry } from '../../shared/types'
+import type { AppState } from './types'
 
 export const [store, setStore] = createStore<AppState>({
   projects: [],
@@ -17,7 +18,7 @@ export async function saveProjects(): Promise<void> {
   const projects = structuredClone(unwrap(store.projects)).map(
     ({ isGit, worktrees, ...rest }) => rest
   )
-  await window.projectAPI.saveProjects(projects as Project[])
+  await window.projectAPI.saveProjects(projects as ProjectEntry[])
 }
 
 /**

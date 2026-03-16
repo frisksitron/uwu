@@ -20,6 +20,7 @@ import {
 import { loadProjects, saveProjects, setStore, store, visualTabOrder } from './store'
 import type { OpencodeTab, PersistentTab, Project, Tab, TerminalCacheEntry } from './types'
 
+const IDLE_RESET_DELAY_MS = 5 * 60_000
 const terminalSnapshots = new Map<string, { lastOutput: string; title: string }>()
 
 export default function App(): JSX.Element {
@@ -50,7 +51,7 @@ export default function App(): JSX.Element {
   })
   onCleanup(() => cleanupEvents?.())
 
-  const handleBeforeUnload = (): void => {
+  const saveTerminalCache = async (): Promise<void> => {
     if (terminalSnapshots.size === 0) return
     const cache: Record<string, TerminalCacheEntry> = {}
     for (const [ptId, snap] of terminalSnapshots) {
@@ -63,9 +64,12 @@ export default function App(): JSX.Element {
       }
     }
     if (Object.keys(cache).length > 0) {
-      // Use sendBeacon-style: invoke is async but we fire-and-forget
-      window.terminalAPI.saveCache(cache).catch(() => {})
+      await window.terminalAPI.saveCache(cache)
     }
+  }
+
+  const handleBeforeUnload = (): void => {
+    saveTerminalCache().catch(() => {})
   }
 
   onMount(() => window.addEventListener('beforeunload', handleBeforeUnload))
@@ -76,7 +80,7 @@ export default function App(): JSX.Element {
   onMount(() => {
     cleanupCloseRequested = window.windowAPI.onCloseRequested(async () => {
       await saveProjects()
-      handleBeforeUnload()
+      await saveTerminalCache().catch(() => {})
       window.windowAPI.confirmClose()
     })
   })
@@ -175,7 +179,7 @@ export default function App(): JSX.Element {
         setTimeout(() => {
           idleTimers.delete(tabId)
           setTabStatus(tabId, 'idle')
-        }, 5 * 60_000)
+        }, IDLE_RESET_DELAY_MS)
       )
     }
   }

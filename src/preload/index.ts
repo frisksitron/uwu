@@ -55,7 +55,7 @@ const projectAPI = {
   } | null> => ipcRenderer.invoke('project:read-metadata', p),
   loadProjects: (): Promise<import('../renderer/src/types').Project[]> =>
     ipcRenderer.invoke('projects:load'),
-  saveProjects: (projects: import('../renderer/src/types').Project[]): Promise<void> =>
+  saveProjects: (projects: import('../shared/types').ProjectEntry[]): Promise<void> =>
     ipcRenderer.invoke('projects:save', projects)
 }
 
@@ -83,9 +83,7 @@ const worktreeAPI = {
     worktreePath: string,
     files: string[]
   ): Promise<{ copied: string[]; errors: string[] }> =>
-    ipcRenderer.invoke('worktree:sync-files', projectPath, worktreePath, files),
-  readScripts: (worktreePath: string): Promise<Record<string, string>> =>
-    ipcRenderer.invoke('worktree:read-scripts', worktreePath)
+    ipcRenderer.invoke('worktree:sync-files', projectPath, worktreePath, files)
 }
 
 const windowAPI = {

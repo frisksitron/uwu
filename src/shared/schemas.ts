@@ -22,7 +22,7 @@ export const KeyboardShortcutsSchema = type({
 export type KeyboardShortcuts = typeof KeyboardShortcutsSchema.infer
 
 export const TerminalSettingsSchema = type({
-  fontSize: 'number',
+  fontSize: 'number >= 8 & number <= 24',
   fontFamily: 'string',
   cursorBlink: 'boolean',
   defaultShell: 'string'

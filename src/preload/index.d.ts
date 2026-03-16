@@ -37,7 +37,7 @@ interface ProjectAPI {
     projectType: string
   } | null>
   loadProjects: () => Promise<import('../renderer/src/types').Project[]>
-  saveProjects: (projects: import('../renderer/src/types').Project[]) => Promise<void>
+  saveProjects: (projects: import('../shared/types').ProjectEntry[]) => Promise<void>
 }
 
 interface WorktreeAPI {
@@ -60,7 +60,6 @@ interface WorktreeAPI {
     worktreePath: string,
     files: string[]
   ) => Promise<{ copied: string[]; errors: string[] }>
-  readScripts: (worktreePath: string) => Promise<Record<string, string>>
 }
 
 interface WindowAPI {

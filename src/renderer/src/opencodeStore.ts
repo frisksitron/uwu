@@ -285,7 +285,7 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
   setState('messages', sessionId, messages)
 
   // Extract agent/model from last user message as the session's active values
-  const lastUser = [...data].reverse().find((m) => m.info.role === 'user')
+  const lastUser = data.findLast((m) => m.info.role === 'user')
   if (lastUser?.info.agent) {
     setState('sessionAgents', sessionId, lastUser.info.agent)
   }
@@ -465,25 +465,23 @@ export function getOcActivity(sessionId: string): string {
   if (state.isGenerating[sessionId]) {
     const msgs = state.messages[sessionId]
     if (msgs) {
-      const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
+      const lastAssistant = msgs.findLast((m) => m.role === 'assistant')
       if (lastAssistant) {
-        const runningTool = [...lastAssistant.parts]
-          .reverse()
-          .find((p) => p.type === 'tool' && p.state.status === 'running')
+        const runningTool = lastAssistant.parts.findLast(
+          (p) => p.type === 'tool' && p.state.status === 'running'
+        )
         if (runningTool && runningTool.type === 'tool') {
           return `Running ${runningTool.tool}`
         }
 
-        const pendingTool = [...lastAssistant.parts]
-          .reverse()
-          .find((p) => p.type === 'tool' && p.state.status === 'pending')
+        const pendingTool = lastAssistant.parts.findLast(
+          (p) => p.type === 'tool' && p.state.status === 'pending'
+        )
         if (pendingTool && pendingTool.type === 'tool') {
           return `Pending ${pendingTool.tool}`
         }
 
-        const reasoning = [...lastAssistant.parts]
-          .reverse()
-          .find((p) => p.type === 'reasoning' && !p.endTime)
+        const reasoning = lastAssistant.parts.findLast((p) => p.type === 'reasoning' && !p.endTime)
         if (reasoning) {
           return 'Thinking'
         }

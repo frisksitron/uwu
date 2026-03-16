@@ -104,6 +104,7 @@ export function setupProjectIpc(): void {
     for (const project of projects) {
       const result = ProjectEntrySchema(project)
       if (result instanceof type.errors) {
+        console.warn('[projects] Dropped invalid entry:', project.name, result.summary)
         changed = true
         continue
       }
@@ -121,7 +122,10 @@ export function setupProjectIpc(): void {
     const validated: ProjectEntry[] = []
     for (const entry of projects) {
       const result = ProjectEntrySchema(entry)
-      if (result instanceof type.errors) return
+      if (result instanceof type.errors) {
+        console.warn('[projects] Skipped invalid entry on save:', result.summary)
+        continue
+      }
       validated.push(result)
     }
     store.set('projects', validated)
