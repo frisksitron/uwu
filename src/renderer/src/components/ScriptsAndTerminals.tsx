@@ -1,68 +1,75 @@
 import { CircleDot, Loader2, Plus, Sparkles, SquareTerminal, X } from 'lucide-solid'
 import { For, type JSX, Match, Show, Switch } from 'solid-js'
-import type { OpencodeInstance, PersistentTerminal, Project, Tab } from '../types'
+import { useProject } from '../context/ProjectContext'
+import type { OpencodeInstance, PersistentTerminal } from '../types'
 import ScriptItem from './ScriptItem'
 
-export interface ScriptsAndTerminalsProps {
-  project: Project
+interface ScriptsAndTerminalsProps {
   scripts: Record<string, string>
+  customScriptNames?: Set<string>
   cwd: string
   indent: number
   worktreePath?: string
-  renamingTerminalId: string | null
-  renameValue: string
-  onOpenScript: (scriptName: string, cwd: string) => void
-  onRunScript: (scriptName: string, cwd: string) => void
-  onCreateTerminal: (worktreePath?: string) => void
-  onOpenTerminal: (project: Project, pt: PersistentTerminal) => void
-  onRemoveTerminal: (project: Project, ptId: string) => void
-  onStartRename: (ptId: string, label: string) => void
-  onConfirmRename: (project: Project, ptId: string) => void
-  onRenameInput: (value: string) => void
-  onCancelRename: () => void
-  isScriptActive: (scriptName: string, cwd?: string) => boolean
-  scriptStatus: (scriptName: string, cwd?: string) => 'idle' | 'running' | 'success' | 'error'
-  getScriptTab: (scriptName: string, cwd?: string) => Tab | undefined
-  isPtActive: (ptId: string) => boolean
-  onCreateOpencodeInstance: (worktreePath?: string) => void
-  onOpenOpencodeInstance: (project: Project, instance: OpencodeInstance) => void
-  onRemoveOpencodeInstance: (project: Project, instanceId: string) => void
-  isOcInstanceActive: (instanceId: string) => boolean
-  getOcSessionId: (instanceId: string) => string | undefined
-  isOcGenerating: (sessionId: string) => boolean
-  ocNeedsAttention: (sessionId: string) => boolean
 }
 
 export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JSX.Element {
-  const visibleScripts = (): string[] =>
-    Object.keys(props.scripts).filter((s) => !(props.project.hiddenScripts ?? []).includes(s))
+  const ctx = useProject()
+  const project = ctx.project
 
-  const terminalsForCwd = (): PersistentTerminal[] =>
-    props.project.persistentTerminals.filter(
-      (pt) => (pt.worktreePath || props.project.path) === props.cwd
+  const customNames = (): Set<string> => props.customScriptNames ?? new Set()
+
+  const visibleDetectedScripts = (): string[] =>
+    Object.keys(props.scripts).filter(
+      (s) => !customNames().has(s) && !(project().hiddenScripts ?? []).includes(s)
     )
 
+  const visibleCustomScripts = (): string[] =>
+    Object.keys(props.scripts).filter(
+      (s) => customNames().has(s) && !(project().hiddenScripts ?? []).includes(s)
+    )
+
+  const terminalsForCwd = (): PersistentTerminal[] =>
+    project().persistentTerminals.filter((pt) => (pt.worktreePath || project().path) === props.cwd)
+
   const opencodeForCwd = (): OpencodeInstance[] =>
-    (props.project.opencodeInstances ?? []).filter(
-      (oc) => (oc.worktreePath || props.project.path) === props.cwd
+    (project().opencodeInstances ?? []).filter(
+      (oc) => (oc.worktreePath || project().path) === props.cwd
     )
 
   return (
     <>
-      {/* Scripts */}
-      <Show when={visibleScripts().length > 0}>
-        <For each={visibleScripts()}>
+      {/* Detected scripts */}
+      <Show when={visibleDetectedScripts().length > 0}>
+        <For each={visibleDetectedScripts()}>
           {(scriptName) => (
             <ScriptItem
-              project={props.project}
               scriptName={scriptName}
               cwd={props.cwd}
               indent={props.indent}
-              isActive={props.isScriptActive(scriptName, props.cwd)}
-              status={props.scriptStatus(scriptName, props.cwd)}
-              tab={props.getScriptTab(scriptName, props.cwd)}
-              onOpen={() => props.onOpenScript(scriptName, props.cwd)}
-              onRun={() => props.onRunScript(scriptName, props.cwd)}
+              isActive={ctx.isScriptActive(scriptName, props.cwd)}
+              status={ctx.scriptStatus(scriptName, props.cwd)}
+              tab={ctx.getScriptTab(scriptName, props.cwd)}
+              onOpen={() => ctx.onOpenScript(scriptName, props.cwd)}
+              onRun={() => ctx.onRunScript(scriptName, props.cwd)}
+            />
+          )}
+        </For>
+      </Show>
+
+      {/* Custom scripts */}
+      <Show when={visibleCustomScripts().length > 0}>
+        <For each={visibleCustomScripts()}>
+          {(scriptName) => (
+            <ScriptItem
+              scriptName={scriptName}
+              cwd={props.cwd}
+              indent={props.indent}
+              isCustom
+              isActive={ctx.isScriptActive(scriptName, props.cwd)}
+              status={ctx.scriptStatus(scriptName, props.cwd)}
+              tab={ctx.getScriptTab(scriptName, props.cwd)}
+              onOpen={() => ctx.onOpenScript(scriptName, props.cwd)}
+              onRun={() => ctx.onRunScript(scriptName, props.cwd)}
             />
           )}
         </For>
@@ -75,10 +82,10 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
             tabIndex={0}
             class="group/pt flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
             style={{ 'padding-left': `${props.indent}px` }}
-            classList={{ 'bg-active': props.isPtActive(pt.id) }}
-            onClick={() => props.onOpenTerminal(props.project, pt)}
+            classList={{ 'bg-active': ctx.isPtActive(pt.id) }}
+            onClick={() => ctx.onOpenTerminal(pt)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') props.onOpenTerminal(props.project, pt)
+              if (e.key === 'Enter' || e.key === ' ') ctx.onOpenTerminal(pt)
             }}
           >
             <SquareTerminal size={11} class="flex-shrink-0 mr-[5px] text-icon-terminal" />
@@ -87,22 +94,22 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
               class="flex-1 flex items-center gap-1.5 min-w-0"
               onDblClick={(e) => {
                 e.stopPropagation()
-                props.onStartRename(pt.id, pt.label)
+                ctx.onStartRename(pt.id, pt.label)
               }}
             >
               <Show
-                when={props.renamingTerminalId === pt.id}
+                when={ctx.renamingTerminalId() === pt.id}
                 fallback={<span class="truncate">{pt.label}</span>}
               >
                 <input
                   autofocus
-                  value={props.renameValue}
-                  onInput={(e) => props.onRenameInput(e.currentTarget.value)}
+                  value={ctx.renameValue()}
+                  onInput={(e) => ctx.onRenameInput(e.currentTarget.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') props.onConfirmRename(props.project, pt.id)
-                    if (e.key === 'Escape') props.onCancelRename()
+                    if (e.key === 'Enter') ctx.onConfirmRename(pt.id)
+                    if (e.key === 'Escape') ctx.onCancelRename()
                   }}
-                  onBlur={() => props.onConfirmRename(props.project, pt.id)}
+                  onBlur={() => ctx.onConfirmRename(pt.id)}
                   class="bg-terminal border border-input text-content py-0 px-1 text-[12px] w-full outline-none min-w-0"
                 />
               </Show>
@@ -111,7 +118,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                props.onRemoveTerminal(props.project, pt.id)
+                ctx.onRemoveTerminal(pt.id)
               }}
               class="invisible group-hover/pt:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
               title="Remove terminal"
@@ -126,14 +133,14 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
       {/* AI chat instances */}
       <For each={opencodeForCwd()}>
         {(oc) => {
-          const sessionId = () => props.getOcSessionId(oc.id)
+          const sessionId = () => ctx.getOcSessionId(oc.id)
           const generating = () => {
             const sid = sessionId()
-            return sid ? props.isOcGenerating(sid) : false
+            return sid ? ctx.isOcGenerating(sid) : false
           }
           const needsAttention = () => {
             const sid = sessionId()
-            return sid ? props.ocNeedsAttention(sid) : false
+            return sid ? ctx.ocNeedsAttention(sid) : false
           }
 
           return (
@@ -142,11 +149,10 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
               tabIndex={0}
               class="group/ai flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
               style={{ 'padding-left': `${props.indent}px` }}
-              classList={{ 'bg-active': props.isOcInstanceActive(oc.id) }}
-              onClick={() => props.onOpenOpencodeInstance(props.project, oc)}
+              classList={{ 'bg-active': ctx.isOcInstanceActive(oc.id) }}
+              onClick={() => ctx.onOpenOpencodeInstance(oc)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ')
-                  props.onOpenOpencodeInstance(props.project, oc)
+                if (e.key === 'Enter' || e.key === ' ') ctx.onOpenOpencodeInstance(oc)
               }}
             >
               <Switch>
@@ -171,7 +177,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  props.onRemoveOpencodeInstance(props.project, oc.id)
+                  ctx.onRemoveOpencodeInstance(oc.id)
                 }}
                 class="invisible group-hover/ai:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
                 title="Remove AI chat"
@@ -191,7 +197,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
       >
         <button
           type="button"
-          onClick={() => props.onCreateTerminal(props.worktreePath)}
+          onClick={() => ctx.onCreateTerminal(props.worktreePath)}
           class="flex items-center gap-1 py-0.5 px-1.5 text-icon-terminal text-[11px] cursor-pointer hover:bg-icon-terminal/10 bg-transparent border border-icon-terminal/30 rounded transition-colors"
         >
           <Plus size={9} />
@@ -199,7 +205,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
         </button>
         <button
           type="button"
-          onClick={() => props.onCreateOpencodeInstance(props.worktreePath)}
+          onClick={() => ctx.onCreateOpencodeInstance(props.worktreePath)}
           class="flex items-center gap-1 py-0.5 px-1.5 text-icon-ai text-[11px] cursor-pointer hover:bg-icon-ai/10 bg-transparent border border-icon-ai/30 rounded transition-colors"
         >
           <Plus size={9} />

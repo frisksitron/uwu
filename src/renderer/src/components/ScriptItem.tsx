@@ -2,16 +2,16 @@ import { Heart, HeartCrack, Loader2, Play, RotateCcw, Scroll, Square } from 'luc
 import { createSignal, type JSX, Match, Show, Switch } from 'solid-js'
 import { getLastLine } from '../outputStore'
 import { runScript, stopScript } from '../scriptActions'
-import type { Project, Tab } from '../types'
+import type { ScriptTab } from '../types'
 
 interface ScriptItemProps {
-  project: Project
   scriptName: string
   cwd: string
   indent: number
   isActive: boolean
+  isCustom?: boolean
   status: 'idle' | 'running' | 'success' | 'error'
-  tab?: Tab
+  tab?: ScriptTab
   onOpen: () => void
   onRun: () => void
 }
@@ -59,7 +59,14 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
           <HeartCrack size={11} class="flex-shrink-0 mr-[5px] text-status-error self-center" />
         </Match>
         <Match when={props.status === 'idle'}>
-          <Scroll size={11} class="flex-shrink-0 mr-[5px] text-icon-script self-center" />
+          <Scroll
+            size={11}
+            class="flex-shrink-0 mr-[5px] self-center"
+            classList={{
+              'text-icon-custom': props.isCustom,
+              'text-icon-script': !props.isCustom
+            }}
+          />
         </Match>
       </Switch>
       <span class="truncate flex-shrink-0">{props.scriptName}</span>

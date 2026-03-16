@@ -16,7 +16,8 @@ export default function ProjectSettings(props: ProjectSettingsProps): JSX.Elemen
     shellOverride: initShell,
     envVars: initEnv,
     syncFiles: initSync,
-    scripts: initScripts
+    scripts: initScripts,
+    customScripts: initCustomScripts
   } = props.project // eslint-disable-line solid/reactivity -- intentionally capturing initial values
 
   const [hiddenScripts, setHiddenScripts] = createSignal<string[]>(initHidden ?? [])
@@ -25,6 +26,9 @@ export default function ProjectSettings(props: ProjectSettingsProps): JSX.Elemen
     Object.entries(initEnv ?? {}).map(([key, value]) => ({ key, value }))
   )
   const [syncFiles, setSyncFiles] = createSignal<string[]>(initSync ?? [])
+  const [customScripts, setCustomScripts] = createSignal<{ name: string; command: string }[]>(
+    Object.entries(initCustomScripts ?? {}).map(([name, command]) => ({ name, command }))
+  )
 
   function toggleScript(name: string): void {
     setHiddenScripts((prev) =>
@@ -44,23 +48,44 @@ export default function ProjectSettings(props: ProjectSettingsProps): JSX.Elemen
     setEnvVars((prev) => prev.filter((_, i) => i !== index))
   }
 
+  function addCustomScript(): void {
+    setCustomScripts((prev) => [...prev, { name: '', command: '' }])
+  }
+
+  function updateCustomScript(index: number, field: 'name' | 'command', val: string): void {
+    setCustomScripts((prev) => prev.map((e, i) => (i === index ? { ...e, [field]: val } : e)))
+  }
+
+  function removeCustomScript(index: number): void {
+    setCustomScripts((prev) => prev.filter((_, i) => i !== index))
+  }
+
   function save(): void {
     const envObj: Record<string, string> = {}
     for (const { key, value } of envVars()) {
       const k = key.trim()
       if (k) envObj[k] = value
     }
+    const csObj: Record<string, string> = {}
+    for (const { name, command } of customScripts()) {
+      const n = name.trim()
+      if (n && command.trim()) csObj[n] = command.trim()
+    }
     props.onUpdate({
       hiddenScripts: hiddenScripts().length > 0 ? hiddenScripts() : undefined,
       shellOverride: shellOverride().trim() || undefined,
       envVars: Object.keys(envObj).length > 0 ? envObj : undefined,
-      syncFiles: syncFiles().length > 0 ? syncFiles() : undefined
+      syncFiles: syncFiles().length > 0 ? syncFiles() : undefined,
+      customScripts: Object.keys(csObj).length > 0 ? csObj : undefined
     })
     props.onClose()
   }
 
   const shellPresets = ['pwsh.exe', 'bash', 'cmd.exe', 'zsh']
-  const scriptNames = Object.keys(initScripts)
+  const scriptNames = [
+    ...Object.keys(initScripts),
+    ...Object.keys(initCustomScripts ?? {}).filter((k) => !(k in initScripts))
+  ]
 
   return (
     <Dialog
@@ -191,6 +216,50 @@ export default function ProjectSettings(props: ProjectSettingsProps): JSX.Elemen
           </div>
         </section>
       </Show>
+
+      {/* Custom Scripts */}
+      <section>
+        <h3 class="text-muted text-[10px] uppercase tracking-widest font-medium m-0 mb-2">
+          Custom Scripts
+        </h3>
+        <div class="flex flex-col gap-1.5">
+          <Index each={customScripts()}>
+            {(entry, index) => (
+              <div class="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={entry().name}
+                  onInput={(e) => updateCustomScript(index, 'name', e.currentTarget.value)}
+                  placeholder="name"
+                  class="w-[120px] bg-terminal border border-input text-content text-[12px] px-1.5 py-1 rounded-sm outline-none font-mono min-w-0"
+                />
+                <input
+                  type="text"
+                  value={entry().command}
+                  onInput={(e) => updateCustomScript(index, 'command', e.currentTarget.value)}
+                  placeholder="command"
+                  class="flex-1 bg-terminal border border-input text-content text-[12px] px-1.5 py-1 rounded-sm outline-none font-mono min-w-0"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeCustomScript(index)}
+                  class="bg-transparent hover:bg-hover border-none text-content cursor-pointer p-0.5 rounded transition-colors flex items-center opacity-70 hover:opacity-100 flex-shrink-0"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            )}
+          </Index>
+        </div>
+        <button
+          type="button"
+          onClick={addCustomScript}
+          class="flex items-center gap-1 mt-2 bg-transparent border-none text-muted text-[11px] cursor-pointer hover:text-accent p-0"
+        >
+          <Plus size={10} />
+          Add script
+        </button>
+      </section>
 
       {/* Environment Variables */}
       <section>

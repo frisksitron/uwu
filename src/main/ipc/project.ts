@@ -11,6 +11,7 @@ interface ProjectEntry {
   projectType: string
   packageManager?: string
   hiddenScripts?: string[]
+  customScripts?: Record<string, string>
   opencodeInstances?: Array<{ id: string; sessionId: string; label: string; worktreePath?: string }>
 }
 
@@ -95,7 +96,9 @@ export function setupProjectIpc(): void {
 
         // Clean up hiddenScripts that no longer exist
         if (project.hiddenScripts) {
-          project.hiddenScripts = project.hiddenScripts.filter((s) => s in newScripts)
+          project.hiddenScripts = project.hiddenScripts.filter(
+            (s) => s in newScripts || s in (project.customScripts ?? {})
+          )
           if (project.hiddenScripts.length === 0) delete project.hiddenScripts
         }
 

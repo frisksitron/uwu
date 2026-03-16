@@ -1,27 +1,33 @@
-import { ChevronDown, ChevronRight, FolderPlus, Plus, RefreshCw, Settings, X } from 'lucide-solid'
+import { FolderPlus } from 'lucide-solid'
 import { createEffect, For, type JSX, onMount, Show } from 'solid-js'
 import type { SetStoreFunction } from 'solid-js/store'
 import { createStore } from 'solid-js/store'
+import { type ProjectContextValue, ProjectProvider } from '../context/ProjectContext'
 import { opencodeState, startServer } from '../opencodeStore'
 import { runScript } from '../scriptActions'
 import type {
   AppState,
   OpencodeInstance,
+  OpencodeTab,
+  PersistentTab,
   PersistentTerminal,
   Project,
+  ScriptTab,
   Tab,
   WorktreeInfo
 } from '../types'
 import CreateWorktreeDialog from './CreateWorktreeDialog'
 import ProjectSettings from './ProjectSettings'
-import ScriptsAndTerminals, { type ScriptsAndTerminalsProps } from './ScriptsAndTerminals'
+import ScriptsAndTerminals from './ScriptsAndTerminals'
+import AddProjectButton from './sidebar/AddProjectButton'
+import ProjectHeader from './sidebar/ProjectHeader'
+import WorktreeList from './sidebar/WorktreeList'
 
 interface SidebarProps {
   store: AppState
   setStore: SetStoreFunction<AppState>
   onAddTab: (tab: Tab, activate?: boolean) => void
   onCloseTab: (tabId: string) => void
-  onSaveProjects: () => void
   width: number
 }
 
@@ -46,6 +52,10 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     worktreeScripts: {}
   })
 
+  function allScripts(project: Project): Record<string, string> {
+    return { ...project.scripts, ...(project.customScripts ?? {}) }
+  }
+
   function isGit(projectId: string): boolean {
     return state.gitProjects[projectId] ?? false
   }
@@ -62,7 +72,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     const wts = await window.worktreeAPI.list(project.path)
     setState('worktrees', project.id, wts)
 
-    // Auto-expand main worktree
     for (const wt of wts) {
       if (wt.isMain) {
         const proj = props.store.projects.find((p) => p.id === project.id)
@@ -80,7 +89,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
               true
             )
           }
-          props.onSaveProjects()
         }
       }
     }
@@ -122,7 +130,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     } else {
       props.setStore('projects', (p) => p.id === projectId, 'expandedWorktrees', wtPath, !current)
     }
-    props.onSaveProjects()
   }
 
   async function addProject(): Promise<void> {
@@ -139,7 +146,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       collapsed: false
     }
     props.setStore('projects', (ps) => [...ps, project])
-    props.onSaveProjects()
     detectGitAndLoadWorktrees(project)
   }
 
@@ -150,7 +156,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'collapsed',
       (c) => !c
     )
-    props.onSaveProjects()
   }
 
   function removeProject(projectId: string): void {
@@ -159,15 +164,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     const projectTabs = props.store.tabs.filter((t) => t.projectId === projectId)
     for (const tab of projectTabs) props.onCloseTab(tab.tabId)
     props.setStore('projects', (ps) => ps.filter((p) => p.id !== projectId))
-    props.onSaveProjects()
   }
 
-  function getScriptTab(project: Project, scriptName: string, cwd?: string): Tab | undefined {
+  // --- Project-scoped operations for context ---
+
+  function getScriptTab(project: Project, scriptName: string, cwd?: string): ScriptTab | undefined {
     return props.store.tabs.find(
-      (t) =>
+      (t): t is ScriptTab =>
         t.projectId === project.id &&
         t.type === 'script' &&
-        t.initialCommand === project.scripts[scriptName] &&
+        t.initialCommand === allScripts(project)[scriptName] &&
         (!cwd || t.cwd === cwd)
     )
   }
@@ -197,18 +203,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       if (autoRun) runScript(existing.tabId)
     } else {
       const tabId = crypto.randomUUID()
-      props.onAddTab(
-        {
-          tabId,
-          label: scriptName,
-          cwd,
-          projectId: project.id,
-          type: 'script',
-          initialCommand: project.scripts[scriptName],
-          status: 'idle'
-        },
-        activate
-      )
+      const tab: ScriptTab = {
+        tabId,
+        label: scriptName,
+        cwd,
+        projectId: project.id,
+        type: 'script',
+        initialCommand: allScripts(project)[scriptName],
+        status: 'idle'
+      }
+      props.onAddTab(tab, activate)
       if (autoRun) {
         queueMicrotask(() => runScript(tabId))
       }
@@ -216,12 +220,14 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   }
 
   function openPersistentTerminal(project: Project, pt: PersistentTerminal): void {
-    const existing = props.store.tabs.find((t) => t.persistentTerminalId === pt.id)
+    const existing = props.store.tabs.find(
+      (t): t is PersistentTab => t.type === 'persistent' && t.persistentTerminalId === pt.id
+    )
     if (existing) {
       props.setStore('activeTabId', existing.tabId)
     } else {
       const cwd = pt.worktreePath || project.path
-      const tab: Tab = {
+      const tab: PersistentTab = {
         tabId: crypto.randomUUID(),
         label: pt.label,
         cwd,
@@ -234,7 +240,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   }
 
   function removePersistentTerminal(project: Project, ptId: string): void {
-    const tab = props.store.tabs.find((t) => t.persistentTerminalId === ptId)
+    const tab = props.store.tabs.find(
+      (t) => t.type === 'persistent' && t.persistentTerminalId === ptId
+    )
     if (tab) props.onCloseTab(tab.tabId)
     props.setStore(
       'projects',
@@ -242,7 +250,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'persistentTerminals',
       (pts) => pts.filter((pt) => pt.id !== ptId)
     )
-    props.onSaveProjects()
   }
 
   function createTerminal(project: Project, worktreePath?: string): void {
@@ -258,7 +265,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'persistentTerminals',
       (pts) => [...pts, pt]
     )
-    props.onSaveProjects()
     openPersistentTerminal(project, pt)
   }
 
@@ -269,18 +275,21 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'persistentTerminals',
       (pts) => pts.map((pt) => (pt.id === ptId ? { ...pt, label: name, customLabel: true } : pt))
     )
-    const tab = props.store.tabs.find((t) => t.persistentTerminalId === ptId)
+    const tab = props.store.tabs.find(
+      (t) => t.type === 'persistent' && t.persistentTerminalId === ptId
+    )
     if (tab) props.setStore('tabs', (t) => t.tabId === tab.tabId, 'label', name)
-    props.onSaveProjects()
   }
 
   function openOpencodeInstance(project: Project, instance: OpencodeInstance): void {
-    const existing = props.store.tabs.find((t) => t.opencodeInstanceId === instance.id)
+    const existing = props.store.tabs.find(
+      (t): t is OpencodeTab => t.type === 'opencode' && t.opencodeInstanceId === instance.id
+    )
     if (existing) {
       props.setStore('activeTabId', existing.tabId)
     } else {
       const cwd = instance.worktreePath || project.path
-      const tab: Tab = {
+      const tab: OpencodeTab = {
         tabId: crypto.randomUUID(),
         label: instance.label,
         cwd,
@@ -294,7 +303,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   }
 
   function removeOpencodeInstance(project: Project, instanceId: string): void {
-    const tab = props.store.tabs.find((t) => t.opencodeInstanceId === instanceId)
+    const tab = props.store.tabs.find(
+      (t) => t.type === 'opencode' && t.opencodeInstanceId === instanceId
+    )
     if (tab) props.onCloseTab(tab.tabId)
     props.setStore(
       'projects',
@@ -302,7 +313,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'opencodeInstances',
       (instances) => (instances ?? []).filter((i) => i.id !== instanceId)
     )
-    props.onSaveProjects()
   }
 
   async function createOpencodeInstance(project: Project, worktreePath?: string): Promise<void> {
@@ -327,7 +337,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'opencodeInstances',
       (instances) => [...(instances ?? []), instance]
     )
-    props.onSaveProjects()
     openOpencodeInstance(project, instance)
   }
 
@@ -342,7 +351,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       (t) =>
         t.projectId === project.id &&
         t.type === 'script' &&
-        t.initialCommand === project.scripts[scriptName] &&
+        t.initialCommand === allScripts(project)[scriptName] &&
         (!cwd || t.cwd === cwd) &&
         t.tabId === props.store.activeTabId
     )
@@ -350,13 +359,19 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
 
   function isPtActive(ptId: string): boolean {
     return props.store.tabs.some(
-      (t) => t.persistentTerminalId === ptId && t.tabId === props.store.activeTabId
+      (t) =>
+        t.type === 'persistent' &&
+        t.persistentTerminalId === ptId &&
+        t.tabId === props.store.activeTabId
     )
   }
 
   function isOcInstanceActive(instanceId: string): boolean {
     return props.store.tabs.some(
-      (t) => t.opencodeInstanceId === instanceId && t.tabId === props.store.activeTabId
+      (t) =>
+        t.type === 'opencode' &&
+        t.opencodeInstanceId === instanceId &&
+        t.tabId === props.store.activeTabId
     )
   }
 
@@ -384,7 +399,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'opencodeInstances',
       (instances) => (instances ?? []).filter((i) => i.worktreePath !== wt.path)
     )
-    props.onSaveProjects()
 
     await refreshWorktrees(project)
   }
@@ -395,28 +409,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     await window.worktreeAPI.syncFiles(project.path, wt.path, files)
   }
 
-  function scriptsAndTerminalsProps(
-    project: Project,
-    scripts: Record<string, string>,
-    cwd: string,
-    indent: number,
-    worktreePath?: string
-  ): ScriptsAndTerminalsProps {
+  function createProjectContext(project: Project): ProjectContextValue {
     return {
-      project,
-      scripts,
-      cwd,
-      indent,
-      worktreePath,
-      renamingTerminalId: state.renamingTerminalId,
-      renameValue: state.renameValue,
+      project: () => project,
       onOpenScript: (scriptName, cwd) => openScript(project, scriptName, cwd),
       onRunScript: (scriptName, cwd) => openScript(project, scriptName, cwd, false, true),
       onCreateTerminal: (wtp) => createTerminal(project, wtp),
-      onOpenTerminal: openPersistentTerminal,
-      onRemoveTerminal: removePersistentTerminal,
+      onOpenTerminal: (pt) => openPersistentTerminal(project, pt),
+      onRemoveTerminal: (ptId) => removePersistentTerminal(project, ptId),
       onStartRename: (ptId, label) => setState({ renamingTerminalId: ptId, renameValue: label }),
-      onConfirmRename: confirmRename,
+      onConfirmRename: (ptId) => confirmRename(project, ptId),
       onRenameInput: (value) => setState('renameValue', value),
       onCancelRename: () => setState({ renamingTerminalId: null, renameValue: '' }),
       isScriptActive: (scriptName, cwd) => isScriptActive(project, scriptName, cwd),
@@ -424,8 +426,8 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       getScriptTab: (scriptName, cwd) => getScriptTab(project, scriptName, cwd),
       isPtActive,
       onCreateOpencodeInstance: (wtp) => createOpencodeInstance(project, wtp),
-      onOpenOpencodeInstance: openOpencodeInstance,
-      onRemoveOpencodeInstance: removeOpencodeInstance,
+      onOpenOpencodeInstance: (instance) => openOpencodeInstance(project, instance),
+      onRemoveOpencodeInstance: (instanceId) => removeOpencodeInstance(project, instanceId),
       isOcInstanceActive,
       getOcSessionId: (instanceId) => {
         const inst = (project.opencodeInstances ?? []).find((i) => i.id === instanceId)
@@ -434,7 +436,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       isOcGenerating: (sessionId) => opencodeState.isGenerating[sessionId] ?? false,
       ocNeedsAttention: (sessionId) =>
         (opencodeState.pendingPermissions[sessionId]?.length ?? 0) > 0 ||
-        (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0
+        (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0,
+      renamingTerminalId: () => state.renamingTerminalId,
+      renameValue: () => state.renameValue
     }
   }
 
@@ -459,189 +463,48 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
 
         <For each={props.store.projects}>
           {(project) => (
-            <div>
-              {/* Project header */}
-              <div
-                role="menuitem"
-                tabIndex={0}
-                class="group flex items-center gap-1 px-2 h-9 border-b border-border cursor-pointer hover:bg-hover"
-                onClick={() => toggleCollapse(project.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') toggleCollapse(project.id)
-                }}
-              >
-                <span class="flex-1 flex items-center gap-1.5 min-w-0" title={project.path}>
-                  <span class="text-muted flex-shrink-0 flex items-center">
-                    {project.collapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
-                  </span>
-                  <span
-                    class="font-medium text-[12px] truncate"
-                    classList={{
-                      'text-content': !project.collapsed,
-                      'text-muted': project.collapsed
-                    }}
-                  >
-                    {project.name}
-                  </span>
-                  <Show when={project.projectType !== 'unknown'}>
-                    <span class="text-[9px] text-muted border border-border px-1 rounded font-mono flex-shrink-0 leading-[14px]">
-                      {project.projectType}
-                    </span>
-                  </Show>
-                </span>
-                <Show when={isGit(project.id)}>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setState('createWorktreeProjectId', project.id)
-                    }}
-                    class="invisible group-hover:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                    title="New worktree"
-                  >
-                    <Plus size={11} />
-                  </button>
-                </Show>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setState('settingsProjectId', project.id)
-                  }}
-                  class="invisible group-hover:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                  title="Project settings"
-                >
-                  <Settings size={11} />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeProject(project.id)
-                  }}
-                  class="invisible group-hover:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                  title="Remove project"
-                >
-                  <X size={11} />
-                </button>
-              </div>
+            <ProjectProvider value={createProjectContext(project)}>
+              <div>
+                <ProjectHeader
+                  project={project}
+                  isGit={isGit(project.id)}
+                  onToggleCollapse={() => toggleCollapse(project.id)}
+                  onSettings={() => setState('settingsProjectId', project.id)}
+                  onRemove={() => removeProject(project.id)}
+                  onNewWorktree={() => setState('createWorktreeProjectId', project.id)}
+                />
 
-              {/* Expanded content */}
-              <Show when={!project.collapsed}>
-                <div class="border-b border-border">
-                  <Show
-                    when={isGit(project.id)}
-                    fallback={
-                      <ScriptsAndTerminals
-                        {...scriptsAndTerminalsProps(project, project.scripts, project.path, 24)}
+                <Show when={!project.collapsed}>
+                  <div class="border-b border-border">
+                    <Show
+                      when={isGit(project.id)}
+                      fallback={
+                        <ScriptsAndTerminals
+                          scripts={allScripts(project)}
+                          customScriptNames={new Set(Object.keys(project.customScripts ?? {}))}
+                          cwd={project.path}
+                          indent={24}
+                        />
+                      }
+                    >
+                      <WorktreeList
+                        project={project}
+                        worktrees={state.worktrees[project.id] ?? []}
+                        worktreeScripts={state.worktreeScripts}
+                        onToggleExpanded={(wtPath) => toggleWorktreeExpanded(project.id, wtPath)}
+                        onRemoveWorktree={(wt) => removeWorktree(project, wt)}
+                        onSyncFiles={(wt) => syncWorktreeFiles(project, wt)}
                       />
-                    }
-                  >
-                    {/* Git project: show worktrees */}
-                    <For each={state.worktrees[project.id] ?? []}>
-                      {(wt) => {
-                        const wtScripts = (): Record<string, string> =>
-                          state.worktreeScripts[wt.path] ?? {}
-                        const isExpanded = (): boolean =>
-                          project.expandedWorktrees?.[wt.path] ?? false
-
-                        return (
-                          <div>
-                            {/* Worktree header */}
-                            <div class="group/wt flex items-center gap-1 py-[3px] px-2 pl-4 cursor-pointer hover:bg-hover">
-                              <span
-                                role="menuitem"
-                                tabIndex={0}
-                                class="flex-1 flex items-center gap-1.5 min-w-0"
-                                onClick={() => toggleWorktreeExpanded(project.id, wt.path)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ')
-                                    toggleWorktreeExpanded(project.id, wt.path)
-                                }}
-                                title={wt.path}
-                              >
-                                <span class="text-muted flex-shrink-0 flex items-center">
-                                  {isExpanded() ? (
-                                    <ChevronDown size={10} />
-                                  ) : (
-                                    <ChevronRight size={10} />
-                                  )}
-                                </span>
-                                <span
-                                  class="text-[12px] truncate"
-                                  classList={{
-                                    'text-content': isExpanded(),
-                                    'text-muted': !isExpanded()
-                                  }}
-                                >
-                                  {wt.branch}
-                                </span>
-                                <Show when={wt.isMain}>
-                                  <span class="text-[10px] flex-shrink-0 text-status-running">
-                                    ★
-                                  </span>
-                                </Show>
-                              </span>
-                              <Show when={!wt.isMain}>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    syncWorktreeFiles(project, wt)
-                                  }}
-                                  class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                                  title="Sync configured files"
-                                >
-                                  <RefreshCw size={10} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    removeWorktree(project, wt)
-                                  }}
-                                  class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                                  title="Remove worktree"
-                                >
-                                  <X size={10} />
-                                </button>
-                              </Show>
-                            </div>
-
-                            <Show when={isExpanded()}>
-                              <ScriptsAndTerminals
-                                {...scriptsAndTerminalsProps(
-                                  project,
-                                  wtScripts(),
-                                  wt.path,
-                                  24,
-                                  wt.path
-                                )}
-                              />
-                            </Show>
-                          </div>
-                        )
-                      }}
-                    </For>
-                  </Show>
-                </div>
-              </Show>
-            </div>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+            </ProjectProvider>
           )}
         </For>
       </div>
 
-      {/* Add Project */}
-      <div class="border-t border-border">
-        <button
-          type="button"
-          onClick={addProject}
-          class="w-full py-1.5 px-2 bg-transparent border-none text-content/60 hover:text-content cursor-pointer text-[11px] flex items-center justify-center gap-1 transition-colors"
-        >
-          <FolderPlus size={10} />
-          Add Project
-        </button>
-      </div>
+      <AddProjectButton onClick={addProject} />
 
       {/* Project settings modal */}
       <Show when={state.settingsProjectId}>
@@ -660,7 +523,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
                       (p) => p.id === id(),
                       (prev) => ({ ...prev, ...updates })
                     )
-                    props.onSaveProjects()
                   }}
                 />
               )}

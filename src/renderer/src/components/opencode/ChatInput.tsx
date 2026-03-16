@@ -322,7 +322,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
           <button
             type="button"
             onClick={() => props.onAbort()}
-            class="bg-status-stop hover:bg-status-stop/80 text-white border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center h-9"
+            class="bg-status-stop hover:bg-status-stop/80 text-white border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center h-9 w-9"
             title="Stop generating"
           >
             <Square size={14} />
