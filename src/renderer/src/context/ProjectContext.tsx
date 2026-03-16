@@ -23,6 +23,7 @@ export interface ProjectContextValue {
   getOcSessionId: (instanceId: string) => string | undefined
   isOcGenerating: (sessionId: string) => boolean
   ocNeedsAttention: (sessionId: string) => boolean
+  ocActivity: (sessionId: string) => string
   renamingTerminalId: Accessor<string | null>
   renameValue: Accessor<string>
 }

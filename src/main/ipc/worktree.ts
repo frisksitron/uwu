@@ -23,6 +23,7 @@ interface WorktreeInfo {
   path: string
   branch: string
   isMain: boolean
+  scripts: Record<string, string>
 }
 
 /** Copy a list of files from projectPath to worktreePath, creating parent dirs as needed. */
@@ -107,10 +108,23 @@ export function setupWorktreeIpc(): void {
           worktrees.push({
             path: wtPath,
             branch: branch || '(unknown)',
-            isMain: i === 0
+            isMain: i === 0,
+            scripts: {}
           })
         }
       }
+
+      // Detect scripts for each worktree in parallel
+      await Promise.all(
+        worktrees.map(async (wt) => {
+          try {
+            const result = await detectProject(wt.path)
+            wt.scripts = result?.scripts ?? {}
+          } catch {
+            // keep empty scripts
+          }
+        })
+      )
 
       return worktrees
     } catch {

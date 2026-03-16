@@ -3,7 +3,7 @@ import { createEffect, For, type JSX, onMount, Show } from 'solid-js'
 import type { SetStoreFunction } from 'solid-js/store'
 import { createStore } from 'solid-js/store'
 import { type ProjectContextValue, ProjectProvider } from '../context/ProjectContext'
-import { opencodeState, startServer } from '../opencodeStore'
+import { getOcActivity, opencodeState, startServer } from '../opencodeStore'
 import { runScript } from '../scriptActions'
 import type {
   AppState,
@@ -36,9 +36,6 @@ interface SidebarState {
   renameValue: string
   settingsProjectId: string | null
   createWorktreeProjectId: string | null
-  gitProjects: Record<string, boolean>
-  worktrees: Record<string, WorktreeInfo[]>
-  worktreeScripts: Record<string, Record<string, string>>
 }
 
 export default function Sidebar(props: SidebarProps): JSX.Element {
@@ -46,23 +43,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     renamingTerminalId: null,
     renameValue: '',
     settingsProjectId: null,
-    createWorktreeProjectId: null,
-    gitProjects: {},
-    worktrees: {},
-    worktreeScripts: {}
+    createWorktreeProjectId: null
   })
 
   function allScripts(project: Project): Record<string, string> {
     return { ...project.scripts, ...(project.customScripts ?? {}) }
   }
 
-  function isGit(projectId: string): boolean {
-    return state.gitProjects[projectId] ?? false
-  }
-
   async function detectGitAndLoadWorktrees(project: Project): Promise<void> {
     const isGitRepo = await window.worktreeAPI.isGitRepo(project.path)
-    setState('gitProjects', project.id, isGitRepo)
+    props.setStore('projects', (p) => p.id === project.id, 'isGit', isGitRepo)
     if (isGitRepo) {
       await refreshWorktrees(project)
     }
@@ -70,7 +60,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
 
   async function refreshWorktrees(project: Project): Promise<void> {
     const wts = await window.worktreeAPI.list(project.path)
-    setState('worktrees', project.id, wts)
+    props.setStore('projects', (p) => p.id === project.id, 'worktrees', wts)
 
     for (const wt of wts) {
       if (wt.isMain) {
@@ -92,11 +82,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         }
       }
     }
-
-    for (const wt of wts) {
-      const scripts = await window.worktreeAPI.readScripts(wt.path)
-      setState('worktreeScripts', wt.path, scripts)
-    }
   }
 
   onMount(() => {
@@ -106,16 +91,9 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   })
 
   createEffect(() => {
-    const projectIds = props.store.projects.map((p) => p.id)
-    const known = Object.keys(state.gitProjects)
     for (const project of props.store.projects) {
-      if (!known.includes(project.id)) {
+      if (project.isGit === undefined) {
         detectGitAndLoadWorktrees(project)
-      }
-    }
-    for (const id of known) {
-      if (!projectIds.includes(id)) {
-        setState('gitProjects', id, undefined as unknown as boolean)
       }
     }
   })
@@ -437,6 +415,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       ocNeedsAttention: (sessionId) =>
         (opencodeState.pendingPermissions[sessionId]?.length ?? 0) > 0 ||
         (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0,
+      ocActivity: (sessionId) => getOcActivity(sessionId),
       renamingTerminalId: () => state.renamingTerminalId,
       renameValue: () => state.renameValue
     }
@@ -467,7 +446,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
               <div>
                 <ProjectHeader
                   project={project}
-                  isGit={isGit(project.id)}
+                  isGit={project.isGit ?? false}
                   onToggleCollapse={() => toggleCollapse(project.id)}
                   onSettings={() => setState('settingsProjectId', project.id)}
                   onRemove={() => removeProject(project.id)}
@@ -477,7 +456,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
                 <Show when={!project.collapsed}>
                   <div class="border-b border-border">
                     <Show
-                      when={isGit(project.id)}
+                      when={project.isGit}
                       fallback={
                         <ScriptsAndTerminals
                           scripts={allScripts(project)}
@@ -489,8 +468,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
                     >
                       <WorktreeList
                         project={project}
-                        worktrees={state.worktrees[project.id] ?? []}
-                        worktreeScripts={state.worktreeScripts}
+                        worktrees={project.worktrees ?? []}
                         onToggleExpanded={(wtPath) => toggleWorktreeExpanded(project.id, wtPath)}
                         onRemoveWorktree={(wt) => removeWorktree(project, wt)}
                         onSyncFiles={(wt) => syncWorktreeFiles(project, wt)}
@@ -515,7 +493,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
               {(proj) => (
                 <ProjectSettings
                   project={proj()}
-                  isGitProject={isGit(proj().id)}
+                  isGitProject={proj().isGit ?? false}
                   onClose={() => setState('settingsProjectId', null)}
                   onUpdate={(updates) => {
                     props.setStore(
