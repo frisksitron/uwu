@@ -5,6 +5,13 @@ import Store from 'electron-store'
 import { AppSettingsSchema } from '../../shared/schemas'
 import { type AppSettings, DEFAULT_SETTINGS } from '../../shared/types'
 
+const PLATFORM_DEFAULT_FONT =
+  process.platform === 'darwin'
+    ? 'Menlo'
+    : process.platform === 'win32'
+      ? 'Consolas'
+      : 'DejaVu Sans Mono'
+
 const settingsStore = new Store<{ settings: AppSettings }>({
   name: 'settings',
   defaults: { settings: DEFAULT_SETTINGS }
@@ -110,8 +117,11 @@ export function setupSettingsIpc(): void {
     const merged = deepMerge(DEFAULT_SETTINGS, saved)
     const result = AppSettingsSchema(merged)
     if (result instanceof type.errors) {
-      return { data: structuredClone(DEFAULT_SETTINGS), corrupted: true }
+      const defaults = structuredClone(DEFAULT_SETTINGS)
+      if (!defaults.terminal.fontFamily) defaults.terminal.fontFamily = PLATFORM_DEFAULT_FONT
+      return { data: defaults, corrupted: true }
     }
+    if (!result.terminal.fontFamily) result.terminal.fontFamily = PLATFORM_DEFAULT_FONT
     return { data: result, corrupted: false }
   })
 
@@ -123,6 +133,7 @@ export function setupSettingsIpc(): void {
 
   ipcMain.handle('settings:reset', () => {
     const defaults = structuredClone(DEFAULT_SETTINGS)
+    if (!defaults.terminal.fontFamily) defaults.terminal.fontFamily = PLATFORM_DEFAULT_FONT
     settingsStore.set('settings', defaults)
     return defaults
   })
