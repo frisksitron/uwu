@@ -1,7 +1,7 @@
 import { type BrowserWindow, ipcMain } from 'electron'
 import { getSettingsStore } from './settings'
 
-const CLOSE_TIMEOUT_MS = 2000
+const CLOSE_TIMEOUT_MS = 5000
 
 export function setupWindowIpc(mainWindow: BrowserWindow): void {
   let closeTimeout: ReturnType<typeof setTimeout> | undefined

@@ -1,5 +1,5 @@
 import { ChevronDown, RotateCcw } from 'lucide-solid'
-import { createSignal, For, type JSX, onMount, Show } from 'solid-js'
+import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
 import {
   type AppSettings,
@@ -32,10 +32,24 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
   const [monoFonts, setMonoFonts] = createSignal<string[]>([])
   const [fontSearch, setFontSearch] = createSignal('')
   const [fontDropdownOpen, setFontDropdownOpen] = createSignal(false)
+  let fontDropdownRef!: HTMLDivElement
 
   onMount(async () => {
     setMonoFonts(await window.settingsAPI.getMonoFonts())
   })
+
+  createEffect(
+    on(fontDropdownOpen, (open) => {
+      if (!open) return
+      const onPointerDown = (e: PointerEvent): void => {
+        if (fontDropdownRef && !fontDropdownRef.contains(e.target as Node)) {
+          setFontDropdownOpen(false)
+        }
+      }
+      document.addEventListener('pointerdown', onPointerDown)
+      onCleanup(() => document.removeEventListener('pointerdown', onPointerDown))
+    })
+  )
 
   const filteredFonts = (): string[] => {
     const q = fontSearch().toLowerCase()
@@ -151,7 +165,7 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
             </div>
 
             {/* Font Family */}
-            <div class="relative">
+            <div ref={fontDropdownRef} class="relative">
               <span class="text-[12px] text-content block mb-1">Font family</span>
               <button
                 type="button"

@@ -80,6 +80,7 @@ export default function Terminal(props: TerminalProps): JSX.Element {
 
     // Let app shortcuts pass through to the global keydown handler
     term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== 'keydown') return true
       for (const binding of Object.values(settings.shortcuts)) {
         if (matchesBinding(e, binding)) return false
       }

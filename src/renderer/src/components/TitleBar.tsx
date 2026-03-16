@@ -1,6 +1,7 @@
 import { Maximize2, Minus, Settings, Square, X } from 'lucide-solid'
 import { createSignal, type JSX, onCleanup, onMount } from 'solid-js'
 import appIcon from '../../../../resources/icon.png'
+import { formatBinding, settings } from '../settingsStore'
 
 interface TitleBarProps {
   collapsed: boolean
@@ -47,7 +48,7 @@ export default function TitleBar(props: TitleBarProps): JSX.Element {
           type="button"
           class="flex items-center justify-center w-10 h-8 text-heading hover:bg-active transition-colors cursor-pointer"
           onClick={() => props.onOpenSettings()}
-          title="Settings (Ctrl+,)"
+          title={`Settings (${formatBinding(settings.shortcuts.openSettings)})`}
         >
           <Settings size={14} />
         </button>
