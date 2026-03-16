@@ -13,7 +13,13 @@ type Detector = (folderPath: string) => Promise<ProjectMetadata | null>
 const detectNodejs: Detector = async (folderPath) => {
   const pkgPath = join(folderPath, 'package.json')
   if (!fs.existsSync(pkgPath)) return null
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+  let pkg: Record<string, unknown>
+  try {
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+  } catch {
+    console.warn(`[detectors] Failed to parse ${pkgPath}`)
+    return null
+  }
   const hasPnpm = fs.existsSync(join(folderPath, 'pnpm-lock.yaml'))
   const hasYarn = fs.existsSync(join(folderPath, 'yarn.lock'))
   const pm = hasPnpm ? 'pnpm' : hasYarn ? 'yarn' : 'npm'
@@ -56,7 +62,7 @@ const detectCargo: Detector = async (folderPath) => {
     const pkg = toml.package as Record<string, unknown> | undefined
     if (pkg?.name && typeof pkg.name === 'string') name = pkg.name
   } catch {
-    /* ignore */
+    console.warn(`[detectors] Failed to parse ${cargoPath}`)
   }
   return {
     name,
@@ -80,12 +86,22 @@ const detectUv: Detector = async (folderPath) => {
     const toml = parseToml(fs.readFileSync(pyprojectPath, 'utf8'))
     const project = toml.project as Record<string, unknown> | undefined
     if (project?.name && typeof project.name === 'string') name = project.name
-    const projectScripts = (project?.scripts ?? {}) as Record<string, string>
-    for (const scriptName of Object.keys(projectScripts)) {
+    // uv task-runner scripts (tool.uv.scripts)
+    const tool = toml.tool as Record<string, unknown> | undefined
+    const uv = tool?.uv as Record<string, unknown> | undefined
+    const uvScripts = (uv?.scripts ?? {}) as Record<string, string>
+    for (const scriptName of Object.keys(uvScripts)) {
       scripts[scriptName] = `uv run ${scriptName}`
     }
+    // Fallback: console entry points (project.scripts)
+    const projectScripts = (project?.scripts ?? {}) as Record<string, string>
+    for (const scriptName of Object.keys(projectScripts)) {
+      if (!(scriptName in scripts)) {
+        scripts[scriptName] = `uv run ${scriptName}`
+      }
+    }
   } catch {
-    // ignore parse errors
+    console.warn(`[detectors] Failed to parse ${pyprojectPath}`)
   }
   return { name, scripts, projectType: 'uv' }
 }

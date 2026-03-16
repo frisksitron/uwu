@@ -145,7 +145,8 @@ export function setupWorktreeIpc(): void {
 
         return { success: true }
       } catch (err) {
-        return { success: false, error: (err as Error).message }
+        const stderr = (err as { stderr?: string }).stderr?.trim()
+        return { success: false, error: stderr || (err as Error).message }
       }
     }
   )
@@ -164,7 +165,8 @@ export function setupWorktreeIpc(): void {
         await execFileAsync('git', args, { cwd: projectPath })
         return { success: true }
       } catch (err) {
-        return { success: false, error: (err as Error).message }
+        const stderr = (err as { stderr?: string }).stderr?.trim()
+        return { success: false, error: stderr || (err as Error).message }
       }
     }
   )

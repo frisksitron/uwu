@@ -21,13 +21,20 @@ function spawnTerminal(
 ): number {
   const id = nextTermId++
   const resolvedShell = shell || getDefaultShell()
-  const ptyProcess = pty.spawn(resolvedShell, args, {
-    name: 'xterm-color',
-    cols: cols || 80,
-    rows: rows || 24,
-    cwd: cwd || process.env.HOME || process.env.USERPROFILE || process.cwd(),
-    env: { ...(process.env as Record<string, string>), ...extraEnv }
-  })
+  let ptyProcess: pty.IPty
+  try {
+    ptyProcess = pty.spawn(resolvedShell, args, {
+      name: 'xterm-color',
+      cols: cols || 80,
+      rows: rows || 24,
+      cwd: cwd || process.env.HOME || process.env.USERPROFILE || process.cwd(),
+      env: { ...(process.env as Record<string, string>), ...extraEnv }
+    })
+  } catch (err) {
+    throw new Error(
+      `Failed to spawn terminal (shell=${resolvedShell}, cwd=${cwd}): ${(err as Error).message}`
+    )
+  }
   ptyProcess.onData((data) => {
     if (!mainWindow.isDestroyed()) mainWindow.webContents.send('terminal:output', id, data)
   })
@@ -105,6 +112,18 @@ export function setupTerminalIpc(mainWindow: BrowserWindow): void {
   })
 
   ipcMain.handle('terminal-cache:load', () => {
-    return cacheStore.store
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+    const now = Date.now()
+    const data = cacheStore.store as Record<string, { savedAt?: number }>
+    let changed = false
+    for (const key of Object.keys(data)) {
+      const savedAt = data[key]?.savedAt
+      if (savedAt && now - savedAt > SEVEN_DAYS_MS) {
+        delete data[key]
+        changed = true
+      }
+    }
+    if (changed) cacheStore.store = data
+    return data
   })
 }
