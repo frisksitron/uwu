@@ -1,5 +1,5 @@
-import { CircleDot, Loader2, Plus, Sparkles, SquareTerminal, X } from 'lucide-solid'
-import { For, type JSX, Match, Show, Switch } from 'solid-js'
+import { Sparkles, SquareTerminal, X } from 'lucide-solid'
+import { For, type JSX, Show } from 'solid-js'
 import { useProject } from '../context/ProjectContext'
 import type { OpencodeInstance, PersistentTerminal } from '../types'
 import ScriptItem from './ScriptItem'
@@ -44,6 +44,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
           {(scriptName) => (
             <ScriptItem
               scriptName={scriptName}
+              command={props.scripts[scriptName]}
               cwd={props.cwd}
               indent={props.indent}
               isActive={ctx.isScriptActive(scriptName, props.cwd)}
@@ -62,6 +63,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
           {(scriptName) => (
             <ScriptItem
               scriptName={scriptName}
+              command={props.scripts[scriptName]}
               cwd={props.cwd}
               indent={props.indent}
               isCustom
@@ -75,57 +77,69 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
         </For>
       </Show>
 
+      {/* Persistent terminals */}
       <For each={terminalsForCwd()}>
         {(pt) => (
           <div
             role="menuitem"
             tabIndex={0}
-            class="group/pt flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
-            style={{ 'padding-left': `${props.indent}px` }}
+            class="group/pt relative cursor-pointer text-content text-[13px] hover:bg-hover"
             classList={{ 'bg-active': ctx.isPtActive(pt.id) }}
             onClick={() => ctx.onOpenTerminal(pt)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') ctx.onOpenTerminal(pt)
             }}
           >
-            <SquareTerminal size={11} class="flex-shrink-0 mr-[5px] text-icon-terminal" />
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: double-click to rename terminal label */}
-            <span
-              class="flex-1 flex items-center gap-1.5 min-w-0"
-              onDblClick={(e) => {
-                e.stopPropagation()
-                ctx.onStartRename(pt.id, pt.label)
-              }}
+            <div
+              class="flex items-center py-1 pr-2"
+              style={{ 'padding-left': `${props.indent}px` }}
             >
-              <Show
-                when={ctx.renamingTerminalId() === pt.id}
-                fallback={<span class="truncate">{pt.label}</span>}
-              >
-                <input
-                  autofocus
-                  value={ctx.renameValue()}
-                  onInput={(e) => ctx.onRenameInput(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') ctx.onConfirmRename(pt.id)
-                    if (e.key === 'Escape') ctx.onCancelRename()
-                  }}
-                  onBlur={() => ctx.onConfirmRename(pt.id)}
-                  class="bg-terminal border border-input text-content py-0 px-1 text-[12px] w-full outline-none min-w-0"
-                />
-              </Show>
-            </span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                ctx.onRemoveTerminal(pt.id)
-              }}
-              class="invisible group-hover/pt:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
-              title="Remove terminal"
-            >
-              <X size={9} />
-              Close
-            </button>
+              <SquareTerminal size={11} class="flex-shrink-0 mr-2 text-icon-terminal" />
+              <div class="flex flex-col flex-1 min-w-0">
+                {/* Line 1: label/rename + close */}
+                <div class="flex items-center h-[18px]">
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: double-click to rename terminal label */}
+                  <span
+                    class="flex-1 flex items-center gap-1.5 min-w-0"
+                    onDblClick={(e) => {
+                      e.stopPropagation()
+                      ctx.onStartRename(pt.id, pt.label)
+                    }}
+                  >
+                    <Show
+                      when={ctx.renamingTerminalId() === pt.id}
+                      fallback={<span class="truncate">{pt.label}</span>}
+                    >
+                      <input
+                        autofocus
+                        value={ctx.renameValue()}
+                        onInput={(e) => ctx.onRenameInput(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') ctx.onConfirmRename(pt.id)
+                          if (e.key === 'Escape') ctx.onCancelRename()
+                        }}
+                        onBlur={() => ctx.onConfirmRename(pt.id)}
+                        class="bg-terminal border border-input text-content py-0 px-1 text-[12px] w-full outline-none min-w-0"
+                      />
+                    </Show>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      ctx.onRemoveTerminal(pt.id)
+                    }}
+                    class="invisible group-hover/pt:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                    title="Remove terminal"
+                  >
+                    <X size={9} />
+                    Close
+                  </button>
+                </div>
+                {/* Line 2: subtitle */}
+                <div class="h-[14px] text-[10px] text-muted truncate">Terminal</div>
+              </div>
+            </div>
           </div>
         )}
       </For>
@@ -142,76 +156,66 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
             const sid = sessionId()
             return sid ? ctx.ocNeedsAttention(sid) : false
           }
+          const activity = () => {
+            const sid = sessionId()
+            return sid ? ctx.ocActivity(sid) : 'Ready'
+          }
 
           return (
             <div
               role="menuitem"
               tabIndex={0}
-              class="group/ai flex items-center py-[3px] pr-2 cursor-pointer text-content text-[13px] hover:bg-hover"
-              style={{ 'padding-left': `${props.indent}px` }}
-              classList={{ 'bg-active': ctx.isOcInstanceActive(oc.id) }}
+              class="group/ai relative cursor-pointer text-content text-[13px] hover:bg-hover"
+              classList={{
+                'bg-active': ctx.isOcInstanceActive(oc.id),
+                'sidebar-pulse-attention': needsAttention(),
+                'sidebar-shimmer shimmer-ai': generating() && !needsAttention()
+              }}
               onClick={() => ctx.onOpenOpencodeInstance(oc)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') ctx.onOpenOpencodeInstance(oc)
               }}
             >
-              <Switch>
-                <Match when={needsAttention()}>
-                  <CircleDot
-                    size={11}
-                    class="flex-shrink-0 mr-[5px] text-accent animate-pulse-attention"
-                  />
-                </Match>
-                <Match when={generating()}>
-                  <Loader2
-                    size={11}
-                    class="flex-shrink-0 mr-[5px] text-status-running animate-spin"
-                  />
-                </Match>
-                <Match when={!needsAttention() && !generating()}>
-                  <Sparkles size={11} class="flex-shrink-0 mr-[5px] text-icon-ai" />
-                </Match>
-              </Switch>
-              <span class="flex-1 min-w-0 truncate">{oc.label}</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  ctx.onRemoveOpencodeInstance(oc.id)
-                }}
-                class="invisible group-hover/ai:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors self-center"
-                title="Remove AI chat"
+              <div
+                class="flex items-center py-1 pr-2"
+                style={{ 'padding-left': `${props.indent}px` }}
               >
-                <X size={9} />
-                Close
-              </button>
+                <Sparkles size={11} class="flex-shrink-0 mr-2 text-icon-ai" />
+                <div class="flex flex-col flex-1 min-w-0">
+                  {/* Line 1: label + close */}
+                  <div class="flex items-center h-[18px]">
+                    <span class="flex-1 min-w-0 truncate">{oc.label}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        ctx.onRemoveOpencodeInstance(oc.id)
+                      }}
+                      class="invisible group-hover/ai:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                      title="Remove AI chat"
+                    >
+                      <X size={9} />
+                      Close
+                    </button>
+                  </div>
+                  {/* Line 2: activity text */}
+                  <div class="h-[14px] text-[10px] truncate">
+                    <span
+                      classList={{
+                        'text-muted': !generating() && !needsAttention(),
+                        'text-icon-ai': generating() && !needsAttention(),
+                        'text-accent': needsAttention()
+                      }}
+                    >
+                      {activity()}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           )
         }}
       </For>
-
-      {/* New terminal / new AI chat buttons */}
-      <div
-        class="flex flex-wrap items-center gap-1.5 mt-1 mb-1.5 pr-2"
-        style={{ 'padding-left': `${props.indent}px` }}
-      >
-        <button
-          type="button"
-          onClick={() => ctx.onCreateTerminal(props.worktreePath)}
-          class="flex items-center gap-1 py-0.5 px-1.5 text-icon-terminal text-[11px] cursor-pointer hover:bg-icon-terminal/10 bg-transparent border border-icon-terminal/30 rounded transition-colors"
-        >
-          <Plus size={9} />
-          terminal
-        </button>
-        <button
-          type="button"
-          onClick={() => ctx.onCreateOpencodeInstance(props.worktreePath)}
-          class="flex items-center gap-1 py-0.5 px-1.5 text-icon-ai text-[11px] cursor-pointer hover:bg-icon-ai/10 bg-transparent border border-icon-ai/30 rounded transition-colors"
-        >
-          <Plus size={9} />
-          ai chat
-        </button>
-      </div>
     </>
   )
 }

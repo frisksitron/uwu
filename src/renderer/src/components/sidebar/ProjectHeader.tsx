@@ -1,6 +1,15 @@
-import { ChevronDown, ChevronRight, Plus, Settings, X } from 'lucide-solid'
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Settings,
+  Sparkles,
+  SquareTerminal,
+  X
+} from 'lucide-solid'
 import type { JSX } from 'solid-js'
 import { Show } from 'solid-js'
+import { useProject } from '../../context/ProjectContext'
 import type { Project } from '../../types'
 import IconButton from '../ui/IconButton'
 
@@ -14,6 +23,8 @@ interface ProjectHeaderProps {
 }
 
 export default function ProjectHeader(props: ProjectHeaderProps): JSX.Element {
+  const ctx = useProject()
+
   return (
     <div
       role="menuitem"
@@ -43,6 +54,14 @@ export default function ProjectHeader(props: ProjectHeaderProps): JSX.Element {
           </span>
         </Show>
       </span>
+      <Show when={!props.isGit}>
+        <IconButton onClick={() => ctx.onCreateTerminal()} title="New terminal">
+          <SquareTerminal size={11} />
+        </IconButton>
+        <IconButton onClick={() => ctx.onCreateOpencodeInstance()} title="New AI chat">
+          <Sparkles size={11} />
+        </IconButton>
+      </Show>
       <Show when={props.isGit}>
         <IconButton onClick={() => props.onNewWorktree()} title="New worktree">
           <Plus size={11} />

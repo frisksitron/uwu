@@ -445,6 +445,64 @@ export function getSlashCommands(projectPath: string): SlashCommand[] {
   return state.slashCommands[projectPath] || []
 }
 
+export function getOcActivity(sessionId: string): string {
+  // Read streamingVersion to subscribe to batched streaming updates
+  void state.streamingVersion
+
+  // 1. Pending permissions
+  const perms = state.pendingPermissions[sessionId]
+  if (perms && perms.length > 0) {
+    return `Approve: ${perms[0].title}`
+  }
+
+  // 2. Pending questions
+  const questions = state.pendingQuestions[sessionId]
+  if (questions && questions.length > 0) {
+    return questions[0].questions[0]?.header || 'Question'
+  }
+
+  // 3-7. Generating states
+  if (state.isGenerating[sessionId]) {
+    const msgs = state.messages[sessionId]
+    if (msgs) {
+      const lastAssistant = [...msgs].reverse().find((m) => m.role === 'assistant')
+      if (lastAssistant) {
+        const runningTool = [...lastAssistant.parts]
+          .reverse()
+          .find((p) => p.type === 'tool' && p.state.status === 'running')
+        if (runningTool && runningTool.type === 'tool') {
+          return `Running ${runningTool.tool}`
+        }
+
+        const pendingTool = [...lastAssistant.parts]
+          .reverse()
+          .find((p) => p.type === 'tool' && p.state.status === 'pending')
+        if (pendingTool && pendingTool.type === 'tool') {
+          return `Pending ${pendingTool.tool}`
+        }
+
+        const reasoning = [...lastAssistant.parts]
+          .reverse()
+          .find((p) => p.type === 'reasoning' && !p.endTime)
+        if (reasoning) {
+          return 'Thinking'
+        }
+
+        const hasStreaming = lastAssistant.parts.some(
+          (p) => (p.type === 'text' || p.type === 'reasoning') && state.streamingContent[p.id]
+        )
+        if (hasStreaming) {
+          return 'Responding'
+        }
+      }
+    }
+    return 'Thinking'
+  }
+
+  // 8. Not generating
+  return 'Ready'
+}
+
 export async function executeCommand(
   projectPath: string,
   sessionId: string,

@@ -1,14 +1,16 @@
-import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount } from 'solid-js'
+import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
 import { produce, unwrap } from 'solid-js/store'
 import OpencodeView from './components/OpencodeView'
 import ScriptView from './components/ScriptView'
+import SettingsModal from './components/SettingsModal'
 import Sidebar from './components/Sidebar'
 import Terminal from './components/Terminal'
 import TitleBar from './components/TitleBar'
 import UpdateBanner from './components/UpdateBanner'
 import { initEventListener } from './opencodeStore'
 import { clearOutput } from './outputStore'
-import { loadProjects, saveProjects, setStore, store } from './store'
+import { loadSettings, matchesBinding, settings } from './settingsStore'
+import { loadProjects, saveProjects, setStore, store, visualTabOrder } from './store'
 import type { OpencodeTab, PersistentTab, Project, Tab, TerminalCacheEntry } from './types'
 
 const terminalSnapshots = new Map<string, { lastOutput: string; title: string }>()
@@ -16,6 +18,7 @@ const terminalSnapshots = new Map<string, { lastOutput: string; title: string }>
 export default function App(): JSX.Element {
   let initialLoadDone = false
   onMount(async () => {
+    await loadSettings()
     await loadProjects()
     initialLoadDone = true
   })
@@ -64,34 +67,41 @@ export default function App(): JSX.Element {
   // Graceful close: save state before window closes
   let cleanupCloseRequested: (() => void) | undefined
   onMount(() => {
-    cleanupCloseRequested = window.windowAPI.onCloseRequested(() => {
-      saveProjects()
+    cleanupCloseRequested = window.windowAPI.onCloseRequested(async () => {
+      await saveProjects()
       handleBeforeUnload()
       window.windowAPI.confirmClose()
     })
   })
   onCleanup(() => cleanupCloseRequested?.())
 
+  const [showSettings, setShowSettings] = createSignal(false)
+
   const handleKeyDown = (e: KeyboardEvent): void => {
-    if (e.ctrlKey && e.key === 'Tab') {
+    if (
+      matchesBinding(e, settings.shortcuts.cycleTabForward) ||
+      matchesBinding(e, settings.shortcuts.cycleTabBackward)
+    ) {
       e.preventDefault()
-      const activeTab = store.tabs.find((t) => t.tabId === store.activeTabId)
-      if (!activeTab) return
-      const scopedTabs = store.tabs.filter((t) => t.cwd === activeTab.cwd)
-      if (scopedTabs.length === 0) return
-      const currentIndex = scopedTabs.findIndex((t) => t.tabId === store.activeTabId)
-      const next = e.shiftKey
-        ? (currentIndex - 1 + scopedTabs.length) % scopedTabs.length
-        : (currentIndex + 1) % scopedTabs.length
-      setStore('activeTabId', scopedTabs[next].tabId)
+      const order = visualTabOrder()
+      if (order.length === 0 || !store.activeTabId) return
+      const currentIndex = order.indexOf(store.activeTabId)
+      const next = matchesBinding(e, settings.shortcuts.cycleTabBackward)
+        ? (currentIndex - 1 + order.length) % order.length
+        : (currentIndex + 1) % order.length
+      setStore('activeTabId', order[next])
     }
-    if (e.ctrlKey && e.key === 'b') {
+    if (matchesBinding(e, settings.shortcuts.toggleSidebar)) {
       e.preventDefault()
       setSidebarCollapsed((c) => !c)
     }
-    if (e.ctrlKey && e.key === 'w') {
+    if (matchesBinding(e, settings.shortcuts.closeTab)) {
       e.preventDefault()
       if (store.activeTabId) closeTab(store.activeTabId)
+    }
+    if (matchesBinding(e, settings.shortcuts.openSettings)) {
+      e.preventDefault()
+      setShowSettings(true)
     }
   }
 
@@ -126,11 +136,18 @@ export default function App(): JSX.Element {
     if (store.activeTabId === tabId) setStore('activeTabId', remaining.at(-1)?.tabId ?? null)
   }
 
+  const idleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
   function setTabStatus(
     tabId: string,
     status: 'idle' | 'running' | 'exited',
     exitCode?: number
   ): void {
+    const prev = idleTimers.get(tabId)
+    if (prev) {
+      clearTimeout(prev)
+      idleTimers.delete(tabId)
+    }
     setStore(
       produce((s) => {
         const tab = s.tabs.find((t) => t.tabId === tabId)
@@ -140,6 +157,15 @@ export default function App(): JSX.Element {
         }
       })
     )
+    if (status === 'exited') {
+      idleTimers.set(
+        tabId,
+        setTimeout(() => {
+          idleTimers.delete(tabId)
+          setTabStatus(tabId, 'idle')
+        }, 5 * 60_000)
+      )
+    }
   }
 
   function handleProcessChange(tab: PersistentTab, processName: string): void {
@@ -197,6 +223,7 @@ export default function App(): JSX.Element {
       <TitleBar
         collapsed={sidebarCollapsed()}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
+        onOpenSettings={() => setShowSettings(true)}
       />
       <UpdateBanner />
       <div class="flex flex-1 overflow-hidden">
@@ -245,7 +272,7 @@ export default function App(): JSX.Element {
                     cwd={tab.cwd}
                     command={tab.initialCommand}
                     onStatusChange={(status, exitCode) => setTabStatus(tab.tabId, status, exitCode)}
-                    shell={project()?.shellOverride}
+                    shell={project()?.shellOverride || settings.terminal.defaultShell || undefined}
                     extraEnv={project()?.envVars}
                   />
                 )
@@ -257,7 +284,7 @@ export default function App(): JSX.Element {
                   cwd={tab.cwd}
                   onExit={(code) => setTabStatus(tab.tabId, 'exited', code)}
                   onProcessChange={(name) => handleProcessChange(tab, name)}
-                  shell={project()?.shellOverride}
+                  shell={project()?.shellOverride || settings.terminal.defaultShell || undefined}
                   extraEnv={project()?.envVars}
                   persistentTerminalId={tab.persistentTerminalId}
                   onCacheSnapshot={(snap) => terminalSnapshots.set(tab.persistentTerminalId, snap)}
@@ -267,6 +294,9 @@ export default function App(): JSX.Element {
           </For>
         </div>
       </div>
+      <Show when={showSettings()}>
+        <SettingsModal onClose={() => setShowSettings(false)} />
+      </Show>
     </div>
   )
 }
