@@ -28,7 +28,7 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => mainWindow.show())
   mainWindow.on('close', () => {
     killAllTerminals()
-    killAllOpencodeServers()
+    void killAllOpencodeServers()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -42,17 +42,33 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  setupTerminalIpc(mainWindow)
-  setupWindowIpc(mainWindow)
-  setupUpdaterIpc(mainWindow)
-  setupOpencodeIpc(mainWindow)
+  for (const [name, setup] of [
+    ['terminal', () => setupTerminalIpc(mainWindow)],
+    ['window', () => setupWindowIpc(mainWindow)],
+    ['updater', () => setupUpdaterIpc(mainWindow)],
+    ['opencode', () => setupOpencodeIpc(mainWindow)]
+  ] as const) {
+    try {
+      setup()
+    } catch (err) {
+      console.error(`[ipc] Failed to setup ${name} IPC:`, err)
+    }
+  }
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.frisksitron.uwu')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
-  setupProjectIpc()
-  setupWorktreeIpc()
+  for (const [name, setup] of [
+    ['project', setupProjectIpc],
+    ['worktree', setupWorktreeIpc]
+  ] as const) {
+    try {
+      setup()
+    } catch (err) {
+      console.error(`[ipc] Failed to setup ${name} IPC:`, err)
+    }
+  }
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
