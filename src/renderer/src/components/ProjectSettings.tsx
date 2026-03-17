@@ -191,29 +191,18 @@ export default function ProjectSettings(props: ProjectSettingsProps): JSX.Elemen
               )}
             </Index>
           </div>
-          <div class="flex items-center gap-2 mt-2">
-            <button
-              type="button"
-              onClick={() => setSyncFiles((prev) => [...prev, ''])}
-              class="flex items-center gap-1 bg-transparent border-none text-muted text-[11px] cursor-pointer hover:text-accent p-0"
-            >
-              <Plus size={10} />
-              Add file
-            </button>
-            <For each={['.env', '.env.local']}>
-              {(preset) => (
-                <Show when={!syncFiles().includes(preset)}>
-                  <button
-                    type="button"
-                    onClick={() => setSyncFiles((prev) => [...prev, preset])}
-                    class="px-2 py-0.5 text-[11px] rounded-sm cursor-pointer border bg-transparent text-muted border-border hover:border-accent hover:text-accent transition-colors"
-                  >
-                    {preset}
-                  </button>
-                </Show>
-              )}
-            </For>
-          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              const files = await window.projectAPI.selectFiles(props.project.path)
+              if (files.length === 0) return
+              setSyncFiles((prev) => [...prev, ...files.filter((f) => !prev.includes(f))])
+            }}
+            class="flex items-center gap-1 mt-2 bg-transparent border-none text-muted text-[11px] cursor-pointer hover:text-accent p-0"
+          >
+            <Plus size={10} />
+            Add file
+          </button>
         </section>
       </Show>
 

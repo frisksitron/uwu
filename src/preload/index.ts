@@ -46,6 +46,8 @@ const terminalAPI = {
 
 const projectAPI = {
   selectFolder: (): Promise<string | null> => ipcRenderer.invoke('project:select-folder'),
+  selectFiles: (defaultPath: string): Promise<string[]> =>
+    ipcRenderer.invoke('project:select-files', defaultPath),
   readMetadata: (
     p: string
   ): Promise<{
