@@ -384,7 +384,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   async function syncWorktreeFiles(project: Project, wt: WorktreeInfo): Promise<void> {
     const files = project.syncFiles ?? []
     if (files.length === 0) return
-    await window.worktreeAPI.syncFiles(project.path, wt.path, files)
+    await window.worktreeAPI.syncFiles(project.path, wt.path, [...files])
   }
 
   function createProjectContext(project: Project): ProjectContextValue {
