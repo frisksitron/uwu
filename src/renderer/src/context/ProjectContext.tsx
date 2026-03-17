@@ -24,6 +24,7 @@ export interface ProjectContextValue {
   isOcGenerating: (sessionId: string) => boolean
   ocNeedsAttention: (sessionId: string) => boolean
   ocActivity: (sessionId: string) => string
+  onOpenDiff: (worktreePath?: string) => void
   renamingTerminalId: Accessor<string | null>
   renameValue: Accessor<string>
 }

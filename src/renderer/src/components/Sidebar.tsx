@@ -7,6 +7,7 @@ import { getOcActivity, opencodeState, startServer } from '../opencodeStore'
 import { runScript } from '../scriptActions'
 import type {
   AppState,
+  DiffTab,
   OpencodeInstance,
   OpencodeTab,
   PersistentTab,
@@ -318,6 +319,25 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     openOpencodeInstance(project, instance)
   }
 
+  function openDiff(project: Project, worktreePath?: string): void {
+    const cwd = worktreePath || project.path
+    const existing = props.store.tabs.find(
+      (t): t is DiffTab => t.type === 'diff' && t.projectId === project.id && t.cwd === cwd
+    )
+    if (existing) {
+      props.setStore('activeTabId', existing.tabId)
+    } else {
+      const tab: DiffTab = {
+        tabId: crypto.randomUUID(),
+        label: 'Diff',
+        cwd,
+        projectId: project.id,
+        type: 'diff'
+      }
+      props.onAddTab(tab)
+    }
+  }
+
   function confirmRename(project: Project, ptId: string): void {
     const name = state.renameValue.trim()
     setState({ renamingTerminalId: null, renameValue: '' })
@@ -416,6 +436,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         (opencodeState.pendingPermissions[sessionId]?.length ?? 0) > 0 ||
         (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0,
       ocActivity: (sessionId) => getOcActivity(sessionId),
+      onOpenDiff: (wtp) => openDiff(project, wtp),
       renamingTerminalId: () => state.renamingTerminalId,
       renameValue: () => state.renameValue
     }

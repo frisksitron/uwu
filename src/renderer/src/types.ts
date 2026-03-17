@@ -1,5 +1,7 @@
 export type {
   AppState,
+  DiffResult,
+  DiffTab,
   OpencodeInstance,
   OpencodeTab,
   PersistentTab,

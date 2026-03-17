@@ -66,6 +66,10 @@ export const visualTabOrder = createMemo((): string[] => {
     const tab = cwdTabs.find((t) => t.type === 'opencode' && t.opencodeInstanceId === oc.id)
     if (tab) ordered.push(tab.tabId)
   }
+  // 5. Diff tabs
+  for (const tab of cwdTabs) {
+    if (tab.type === 'diff') ordered.push(tab.tabId)
+  }
 
   return ordered
 })

@@ -1,5 +1,6 @@
 import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
 import { produce, unwrap } from 'solid-js/store'
+import DiffView from './components/DiffView'
 import OpencodeView from './components/OpencodeView'
 import ScriptView from './components/ScriptView'
 import SettingsModal from './components/SettingsModal'
@@ -289,6 +290,16 @@ export default function App(): JSX.Element {
             {(tab) => {
               const project = (): Project | undefined =>
                 store.projects.find((p) => p.id === tab.projectId)
+              if (tab.type === 'diff') {
+                return (
+                  <DiffView
+                    tabId={tab.tabId}
+                    visible={store.activeTabId === tab.tabId}
+                    cwd={tab.cwd}
+                    projectId={tab.projectId}
+                  />
+                )
+              }
               if (tab.type === 'opencode') {
                 return (
                   <OpencodeView
