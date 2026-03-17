@@ -154,26 +154,6 @@
 }
 
 
-.diff-view .shiki pre {
-  font-size: 11px;
-  line-height: 1.5;
-  max-height: 400px;
-  overflow-y: auto;
-  margin: 0;
-}
-
-.diff-view .shiki code .diff-add {
-  background-color: rgba(180, 230, 180, 0.25);
-  display: inline-block;
-  width: 100%;
-}
-
-.diff-view .shiki code .diff-remove {
-  background-color: rgba(240, 180, 180, 0.25);
-  display: inline-block;
-  width: 100%;
-}
-
 /* Diff view styles */
 .diff-table .diff-gutter {
   width: 45px;

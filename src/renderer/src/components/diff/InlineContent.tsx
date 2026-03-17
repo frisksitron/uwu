@@ -1,4 +1,4 @@
-import type { JSX } from 'solid-js'
+import { For, type JSX } from 'solid-js'
 import type { InlineSpan } from '../../lib/inlineDiff'
 
 export default function InlineContent(props: {
@@ -6,8 +6,8 @@ export default function InlineContent(props: {
   type: 'add' | 'remove'
 }): JSX.Element {
   return (
-    <>
-      {props.spans.map((s) => (
+    <For each={props.spans}>
+      {(s) => (
         <span
           classList={{
             'diff-inline-add': s.type === 'change' && props.type === 'add',
@@ -16,7 +16,7 @@ export default function InlineContent(props: {
         >
           {s.text}
         </span>
-      ))}
-    </>
+      )}
+    </For>
   )
 }

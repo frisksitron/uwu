@@ -89,7 +89,9 @@ function FileSection(props: {
         <div class="flex">
           {/* Left pane (old) */}
           <div
-            ref={leftPane}
+            ref={(el) => {
+              leftPane = el
+            }}
             class="flex-1 min-w-0 overflow-x-auto border-r border-border/40"
             onScroll={(e) => syncScroll(e.currentTarget, rightPane)}
           >
@@ -124,7 +126,9 @@ function FileSection(props: {
           </div>
           {/* Right pane (new) */}
           <div
-            ref={rightPane}
+            ref={(el) => {
+              rightPane = el
+            }}
             class="flex-1 min-w-0 overflow-x-auto"
             onScroll={(e) => syncScroll(e.currentTarget, leftPane)}
           >
