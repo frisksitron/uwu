@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import * as fs from 'node:fs'
-import { extname, join } from 'node:path'
+import { extname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { ipcMain } from 'electron'
 import type { DiffFile, DiffFileStatus, DiffHunk, DiffResult, DiffRow } from '../../shared/types'
@@ -74,25 +74,32 @@ function langFromPath(filePath: string): string | undefined {
   return EXT_TO_LANG[extname(filePath).toLowerCase()]
 }
 
+let difftasticCache: boolean | null = null
+
 async function hasDifftastic(): Promise<boolean> {
+  if (difftasticCache !== null) return difftasticCache
   try {
-    // shell: true needed on Windows so the shell can resolve difft in PATH
-    await execFileAsync('difft', ['--version'], { shell: true })
-    return true
+    await execFileAsync('difft', ['--version'])
+    difftasticCache = true
   } catch {
-    return false
+    difftasticCache = false
   }
+  return difftasticCache
 }
 
-function getNumstat(stdout: string): Map<string, { additions: number; deletions: number }> {
-  const map = new Map<string, { additions: number; deletions: number }>()
+function getNumstat(
+  stdout: string
+): Map<string, { additions: number; deletions: number; binary: boolean }> {
+  const map = new Map<string, { additions: number; deletions: number; binary: boolean }>()
   for (const line of stdout.trim().split('\n')) {
     if (!line) continue
     const [add, del, file] = line.split('\t')
     if (file) {
+      const binary = add === '-' && del === '-'
       map.set(file, {
-        additions: add === '-' ? 0 : Number.parseInt(add, 10),
-        deletions: del === '-' ? 0 : Number.parseInt(del, 10)
+        additions: binary ? 0 : Number.parseInt(add, 10),
+        deletions: binary ? 0 : Number.parseInt(del, 10),
+        binary
       })
     }
   }
@@ -315,13 +322,14 @@ function buildRowsFromChunks(
         ni++
       }
     } else if (oldIsChanged && oldToNew.has(oi)) {
-      // Modified line — advance both
+      // Modified line — use mapped new line to avoid desync from interleaved adds/removes
+      const mappedNi = oldToNew.get(oi) as number
       rows.push({
         type: 'modify',
         oldLineNo: oi + 1,
-        newLineNo: ni + 1,
+        newLineNo: mappedNi + 1,
         oldContent: oldLines[oi],
-        newContent: newLines[ni]
+        newContent: newLines[mappedNi]
       })
       oi++
       ni++
@@ -435,7 +443,7 @@ async function tryDifftasticHunks(
             mode === 'unstaged'
               ? readFileContent(join(cwd, obj.path))
               : mode === 'staged'
-                ? await getFileContent(cwd, '', obj.path)
+                ? await getFileContent(cwd, ':0', obj.path)
                 : readFileContent(join(cwd, obj.path))
 
           const oldLines = oldContent?.split('\n') ?? []
@@ -459,10 +467,17 @@ async function tryDifftasticHunks(
 
 export function setupDiffIpc(): void {
   ipcMain.handle('diff:get', async (_event, cwd: string, mode: string): Promise<DiffResult> => {
-    const diffMode = (mode === 'staged' || mode === 'all' ? mode : 'unstaged') as
-      | 'unstaged'
-      | 'staged'
-      | 'all'
+    if (typeof cwd !== 'string' || !cwd || !isAbsolute(cwd)) {
+      return {
+        files: [],
+        totalAdditions: 0,
+        totalDeletions: 0,
+        hasDifftastic: false,
+        error: 'Invalid working directory'
+      }
+    }
+
+    const diffMode = mode === 'staged' || mode === 'all' ? mode : 'unstaged'
     const modeArgs = diffMode === 'staged' ? ['--cached'] : diffMode === 'all' ? ['HEAD'] : []
 
     try {
@@ -510,6 +525,7 @@ export function setupDiffIpc(): void {
           status: info.status,
           additions,
           deletions,
+          binary: stats?.binary,
           language: langFromPath(filePath),
           hunks
         })
