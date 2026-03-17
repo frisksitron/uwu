@@ -24,10 +24,11 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
 
   const fileRefs = new Map<number, HTMLDivElement>()
 
-  async function fetchDiff(): Promise<void> {
+  async function fetchDiff(mode?: DiffMode): Promise<void> {
+    fileRefs.clear()
     setLoading(true)
     try {
-      const result = await window.diffAPI.get(props.cwd, diffMode())
+      const result = await window.diffAPI.get(props.cwd, mode ?? diffMode())
       setDiffResult(result)
       setSelectedFileIdx(0)
     } catch (err) {
@@ -47,7 +48,7 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
 
   function handleDiffModeChange(mode: DiffMode): void {
     setDiffMode(mode)
-    fetchDiff()
+    fetchDiff(mode)
   }
 
   function handleFileSelect(idx: number): void {
@@ -93,7 +94,7 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
         onToggleFileList={() => setFileListCollapsed((c) => !c)}
       />
 
-      <Show when={result() && !result()?.hasDifftastic}>
+      <Show when={result() && !result()?.hasDifftastic && !result()?.error}>
         <div class="flex items-center gap-1.5 px-3 py-1 bg-sidebar/50 border-b border-border/40 text-[10px] text-muted">
           <Info size={11} />
           <span>

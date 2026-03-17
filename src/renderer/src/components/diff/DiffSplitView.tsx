@@ -1,6 +1,7 @@
 import { createMemo, For, type JSX, Show } from 'solid-js'
 import type { DiffFile, DiffHunk } from '../../../../shared/types'
-import { computeInlineSpans, type InlineSpan } from '../../lib/inlineDiff'
+import { computeInlineSpans } from '../../lib/inlineDiff'
+import InlineContent from './InlineContent'
 
 interface DiffSplitViewProps {
   files: DiffFile[]
@@ -15,32 +16,7 @@ interface SplitRow {
   newContent: string | null
 }
 
-function expandHunksToSplitRows(hunks: DiffHunk[]): SplitRow[] {
-  const rows: SplitRow[] = []
-  for (const hunk of hunks) {
-    for (const row of hunk.rows) {
-      rows.push(row)
-    }
-  }
-  return rows
-}
-
-function InlineContent(props: { spans: InlineSpan[]; type: 'add' | 'remove' }): JSX.Element {
-  return (
-    <>
-      {props.spans.map((s) => (
-        <span
-          classList={{
-            'diff-inline-add': s.type === 'change' && props.type === 'add',
-            'diff-inline-remove': s.type === 'change' && props.type === 'remove'
-          }}
-        >
-          {s.text}
-        </span>
-      ))}
-    </>
-  )
-}
+const expandHunksToSplitRows = (hunks: DiffHunk[]): SplitRow[] => hunks.flatMap((h) => h.rows)
 
 function OldCellContent(props: { row: SplitRow }): JSX.Element {
   if (props.row.type === 'modify' && props.row.oldContent != null && props.row.newContent != null) {
@@ -68,6 +44,19 @@ function FileSection(props: {
   fileRefs: Map<number, HTMLDivElement>
 }): JSX.Element {
   const splitRows = () => expandHunksToSplitRows(props.file.hunks)
+  let leftPane: HTMLDivElement | undefined
+  let rightPane: HTMLDivElement | undefined
+  let syncing = false
+
+  function syncScroll(source: HTMLDivElement, target: HTMLDivElement | undefined): void {
+    if (syncing || !target) return
+    syncing = true
+    const maxSource = source.scrollWidth - source.clientWidth
+    const maxTarget = target.scrollWidth - target.clientWidth
+    const ratio = maxSource > 0 ? source.scrollLeft / maxSource : 0
+    target.scrollLeft = ratio * maxTarget
+    syncing = false
+  }
 
   return (
     <div
@@ -97,57 +86,76 @@ function FileSection(props: {
           </div>
         }
       >
-        <div class="overflow-x-auto">
-          <div class="diff-split-grid font-mono text-[11px] leading-[1.5]">
-            <For each={splitRows()}>
-              {(row) => (
-                <>
-                  {/* Left side (old) */}
-                  <div
-                    class="diff-gutter select-none text-right px-1.5 text-muted/60"
-                    classList={{
-                      'diff-gutter-remove': row.type === 'remove' || row.type === 'modify',
-                      'diff-gutter-context': row.type === 'context',
-                      'diff-gutter-filler': row.type === 'add'
-                    }}
-                  >
-                    {row.type !== 'add' ? (row.oldLineNo ?? '') : ''}
-                  </div>
-                  <div
-                    class="diff-content px-2 whitespace-pre overflow-hidden"
-                    classList={{
-                      'diff-row-remove': row.type === 'remove' || row.type === 'modify',
-                      'diff-row-context': row.type === 'context',
-                      'diff-filler': row.type === 'add'
-                    }}
-                  >
-                    <OldCellContent row={row} />
-                  </div>
-
-                  {/* Right side (new) */}
-                  <div
-                    class="diff-gutter select-none text-right px-1.5 text-muted/60 border-l border-border/40"
-                    classList={{
-                      'diff-gutter-add': row.type === 'add' || row.type === 'modify',
-                      'diff-gutter-context': row.type === 'context',
-                      'diff-gutter-filler': row.type === 'remove'
-                    }}
-                  >
-                    {row.type !== 'remove' ? (row.newLineNo ?? '') : ''}
-                  </div>
-                  <div
-                    class="diff-content px-2 whitespace-pre overflow-hidden"
-                    classList={{
-                      'diff-row-add': row.type === 'add' || row.type === 'modify',
-                      'diff-row-context': row.type === 'context',
-                      'diff-filler': row.type === 'remove'
-                    }}
-                  >
-                    <NewCellContent row={row} />
-                  </div>
-                </>
-              )}
-            </For>
+        <div class="flex">
+          {/* Left pane (old) */}
+          <div
+            ref={leftPane}
+            class="flex-1 min-w-0 overflow-x-auto border-r border-border/40"
+            onScroll={(e) => syncScroll(e.currentTarget, rightPane)}
+          >
+            <div class="diff-half-grid font-mono text-[11px] leading-[1.5]">
+              <For each={splitRows()}>
+                {(row) => (
+                  <>
+                    <div
+                      class="diff-gutter select-none text-right px-1.5 text-muted/60"
+                      classList={{
+                        'diff-gutter-remove': row.type === 'remove' || row.type === 'modify',
+                        'diff-gutter-context': row.type === 'context',
+                        'diff-gutter-filler': row.type === 'add'
+                      }}
+                    >
+                      {row.type !== 'add' ? (row.oldLineNo ?? '') : ''}
+                    </div>
+                    <div
+                      class="diff-content px-2 whitespace-pre"
+                      classList={{
+                        'diff-row-remove': row.type === 'remove' || row.type === 'modify',
+                        'diff-row-context': row.type === 'context',
+                        'diff-filler': row.type === 'add'
+                      }}
+                    >
+                      <OldCellContent row={row} />
+                    </div>
+                  </>
+                )}
+              </For>
+            </div>
+          </div>
+          {/* Right pane (new) */}
+          <div
+            ref={rightPane}
+            class="flex-1 min-w-0 overflow-x-auto"
+            onScroll={(e) => syncScroll(e.currentTarget, leftPane)}
+          >
+            <div class="diff-half-grid font-mono text-[11px] leading-[1.5]">
+              <For each={splitRows()}>
+                {(row) => (
+                  <>
+                    <div
+                      class="diff-gutter select-none text-right px-1.5 text-muted/60"
+                      classList={{
+                        'diff-gutter-add': row.type === 'add' || row.type === 'modify',
+                        'diff-gutter-context': row.type === 'context',
+                        'diff-gutter-filler': row.type === 'remove'
+                      }}
+                    >
+                      {row.type !== 'remove' ? (row.newLineNo ?? '') : ''}
+                    </div>
+                    <div
+                      class="diff-content px-2 whitespace-pre"
+                      classList={{
+                        'diff-row-add': row.type === 'add' || row.type === 'modify',
+                        'diff-row-context': row.type === 'context',
+                        'diff-filler': row.type === 'remove'
+                      }}
+                    >
+                      <NewCellContent row={row} />
+                    </div>
+                  </>
+                )}
+              </For>
+            </div>
           </div>
         </div>
       </Show>

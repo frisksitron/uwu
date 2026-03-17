@@ -1,5 +1,5 @@
 import { PanelLeftClose, PanelLeftOpen, RefreshCw } from 'lucide-solid'
-import type { JSX } from 'solid-js'
+import { For, type JSX } from 'solid-js'
 
 export type DiffMode = 'unstaged' | 'staged' | 'all'
 export type ViewMode = 'unified' | 'split'
@@ -24,19 +24,21 @@ function ToggleGroup(props: {
 }): JSX.Element {
   return (
     <div class="flex rounded overflow-hidden border border-border">
-      {props.options.map((opt) => (
-        <button
-          type="button"
-          class="px-2 py-0.5 text-[11px] font-medium transition-colors"
-          classList={{
-            'bg-accent text-white': props.value === opt.value,
-            'bg-sidebar text-muted hover:bg-hover': props.value !== opt.value
-          }}
-          onClick={() => props.onChange(opt.value)}
-        >
-          {opt.label}
-        </button>
-      ))}
+      <For each={props.options}>
+        {(opt) => (
+          <button
+            type="button"
+            class="px-2 py-0.5 text-[11px] font-medium transition-colors"
+            classList={{
+              'bg-accent text-white': props.value === opt.value,
+              'bg-sidebar text-muted hover:bg-hover': props.value !== opt.value
+            }}
+            onClick={() => props.onChange(opt.value)}
+          >
+            {opt.label}
+          </button>
+        )}
+      </For>
     </div>
   )
 }

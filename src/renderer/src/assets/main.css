@@ -24,6 +24,8 @@
   --color-icon-terminal:  #7ba4c4;
   --color-icon-ai:        #b07cc9;
   --color-icon-custom:    #7bb88a;
+  --color-diff-add:       #28a04b;
+  --color-diff-remove:    #d73a3a;
 }
 
 .markdown {
@@ -186,11 +188,11 @@
 }
 
 .diff-row-add {
-  background-color: rgba(40, 160, 75, 0.12);
+  background-color: color-mix(in srgb, var(--color-diff-add) 12%, transparent);
 }
 
 .diff-row-remove {
-  background-color: rgba(215, 58, 58, 0.12);
+  background-color: color-mix(in srgb, var(--color-diff-remove) 12%, transparent);
 }
 
 .diff-row-context {
@@ -198,46 +200,38 @@
 }
 
 .diff-gutter-add {
-  background-color: rgba(40, 160, 75, 0.2);
+  background-color: color-mix(in srgb, var(--color-diff-add) 20%, transparent);
 }
 
 .diff-gutter-remove {
-  background-color: rgba(215, 58, 58, 0.2);
+  background-color: color-mix(in srgb, var(--color-diff-remove) 20%, transparent);
 }
 
 .diff-inline-add {
-  background-color: rgba(40, 160, 75, 0.28);
+  background-color: color-mix(in srgb, var(--color-diff-add) 28%, transparent);
   border-radius: 2px;
 }
 
 .diff-inline-remove {
-  background-color: rgba(215, 58, 58, 0.28);
+  background-color: color-mix(in srgb, var(--color-diff-remove) 28%, transparent);
   border-radius: 2px;
 }
 
-.diff-filler {
-  background: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 4px,
-    rgba(196, 154, 184, 0.08) 4px,
-    rgba(196, 154, 184, 0.08) 8px
-  );
-}
-
+.diff-filler,
 .diff-gutter-filler {
   background: repeating-linear-gradient(
     -45deg,
     transparent,
     transparent 4px,
-    rgba(196, 154, 184, 0.08) 4px,
-    rgba(196, 154, 184, 0.08) 8px
+    color-mix(in srgb, var(--color-muted) 8%, transparent) 4px,
+    color-mix(in srgb, var(--color-muted) 8%, transparent) 8px
   );
 }
 
-.diff-split-grid {
+.diff-half-grid {
   display: grid;
-  grid-template-columns: 45px 1fr 45px 1fr;
+  grid-template-columns: 45px max-content;
+  min-width: 100%;
 }
 
 .diff-file-list {

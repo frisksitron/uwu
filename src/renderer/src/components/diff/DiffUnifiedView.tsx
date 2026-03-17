@@ -1,6 +1,7 @@
 import { createMemo, For, type JSX, Show } from 'solid-js'
 import type { DiffFile, DiffRow } from '../../../../shared/types'
-import { computeInlineSpans, type InlineSpan } from '../../lib/inlineDiff'
+import { computeInlineSpans } from '../../lib/inlineDiff'
+import InlineContent from './InlineContent'
 
 interface DiffUnifiedViewProps {
   files: DiffFile[]
@@ -10,23 +11,6 @@ interface DiffUnifiedViewProps {
 /** A display row that carries partner content for inline highlighting of modify pairs. */
 interface DisplayRow extends DiffRow {
   partnerContent?: string | null
-}
-
-function InlineContent(props: { spans: InlineSpan[]; type: 'add' | 'remove' }): JSX.Element {
-  return (
-    <>
-      {props.spans.map((s) => (
-        <span
-          classList={{
-            'diff-inline-add': s.type === 'change' && props.type === 'add',
-            'diff-inline-remove': s.type === 'change' && props.type === 'remove'
-          }}
-        >
-          {s.text}
-        </span>
-      ))}
-    </>
-  )
 }
 
 function RowContent(props: { row: DisplayRow }): JSX.Element {
