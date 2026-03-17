@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import * as fs from 'node:fs'
+import * as fs from 'node:fs/promises'
 import { extname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { ipcMain } from 'electron'
@@ -74,17 +74,19 @@ function langFromPath(filePath: string): string | undefined {
   return EXT_TO_LANG[extname(filePath).toLowerCase()]
 }
 
-let difftasticCache: boolean | null = null
+let difftasticCache: { value: boolean; ts: number } | null = null
+const DIFFTASTIC_CACHE_TTL = 5 * 60 * 1000
 
 async function hasDifftastic(): Promise<boolean> {
-  if (difftasticCache !== null) return difftasticCache
+  if (difftasticCache !== null && Date.now() - difftasticCache.ts < DIFFTASTIC_CACHE_TTL)
+    return difftasticCache.value
   try {
     await execFileAsync('difft', ['--version'])
-    difftasticCache = true
+    difftasticCache = { value: true, ts: Date.now() }
   } catch {
-    difftasticCache = false
+    difftasticCache = { value: false, ts: Date.now() }
   }
-  return difftasticCache
+  return difftasticCache.value
 }
 
 function getNumstat(
@@ -332,7 +334,7 @@ function buildRowsFromChunks(
         newContent: newLines[mappedNi]
       })
       oi++
-      ni++
+      ni = mappedNi + 1
     } else if (oldIsChanged) {
       // Deleted line — only old side advances
       rows.push({
@@ -399,9 +401,9 @@ async function getFileContent(cwd: string, ref: string, filePath: string): Promi
   }
 }
 
-function readFileContent(fullPath: string): string | null {
+async function readFileContent(fullPath: string): Promise<string | null> {
   try {
-    return fs.readFileSync(fullPath, 'utf-8')
+    return await fs.readFile(fullPath, 'utf-8')
   } catch {
     return null
   }
@@ -440,11 +442,9 @@ async function tryDifftasticHunks(
 
           const oldContent = await getFileContent(cwd, 'HEAD', obj.path)
           const newContent =
-            mode === 'unstaged'
-              ? readFileContent(join(cwd, obj.path))
-              : mode === 'staged'
-                ? await getFileContent(cwd, ':0', obj.path)
-                : readFileContent(join(cwd, obj.path))
+            mode === 'staged'
+              ? await getFileContent(cwd, ':0', obj.path)
+              : await readFileContent(join(cwd, obj.path))
 
           const oldLines = oldContent?.split('\n') ?? []
           const newLines = newContent?.split('\n') ?? []
