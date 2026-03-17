@@ -196,6 +196,11 @@ const opencodeAPI = {
   }
 }
 
+const diffAPI = {
+  get: (cwd: string, mode: string): Promise<import('../shared/types').DiffResult> =>
+    ipcRenderer.invoke('diff:get', cwd, mode)
+}
+
 const settingsAPI = {
   load: (): Promise<{ data: import('../shared/types').AppSettings; corrupted: boolean }> =>
     ipcRenderer.invoke('settings:load'),
@@ -248,6 +253,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('worktreeAPI', worktreeAPI)
     contextBridge.exposeInMainWorld('windowAPI', windowAPI)
     contextBridge.exposeInMainWorld('opencodeAPI', opencodeAPI)
+    contextBridge.exposeInMainWorld('diffAPI', diffAPI)
     contextBridge.exposeInMainWorld('settingsAPI', settingsAPI)
     contextBridge.exposeInMainWorld('updaterAPI', updaterAPI)
   } catch (error) {
@@ -266,6 +272,8 @@ if (process.contextIsolated) {
   window.windowAPI = windowAPI
   // @ts-expect-error (window.opencodeAPI is not in the declared Window type)
   window.opencodeAPI = opencodeAPI
+  // @ts-expect-error (window.diffAPI is not in the declared Window type)
+  window.diffAPI = diffAPI
   // @ts-expect-error (window.settingsAPI is not in the declared Window type)
   window.settingsAPI = settingsAPI
   // @ts-expect-error (window.updaterAPI is not in the declared Window type)

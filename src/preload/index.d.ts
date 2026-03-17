@@ -134,6 +134,10 @@ interface UpdaterAPI {
   onError: (cb: (error: { message: string; stack?: string }) => void) => () => void
 }
 
+interface DiffAPI {
+  get: (cwd: string, mode: string) => Promise<import('../shared/types').DiffResult>
+}
+
 interface SettingsAPI {
   load: () => Promise<{ data: import('../shared/types').AppSettings; corrupted: boolean }>
   save: (settings: import('../shared/types').AppSettings) => Promise<void>
@@ -150,6 +154,7 @@ declare global {
     worktreeAPI: WorktreeAPI
     windowAPI: WindowAPI
     opencodeAPI: OpencodeAPI
+    diffAPI: DiffAPI
     settingsAPI: SettingsAPI
     updaterAPI: UpdaterAPI
   }

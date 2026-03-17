@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, screen, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
+import { setupDiffIpc } from './ipc/diff'
 import { killAllOpencodeServers, setupOpencodeIpc } from './ipc/opencode'
 import { setupProjectIpc } from './ipc/project'
 import { getSettingsStore, setupSettingsIpc } from './ipc/settings'
@@ -92,7 +93,8 @@ app.whenReady().then(() => {
   for (const [name, setup] of [
     ['settings', setupSettingsIpc],
     ['project', setupProjectIpc],
-    ['worktree', setupWorktreeIpc]
+    ['worktree', setupWorktreeIpc],
+    ['diff', setupDiffIpc]
   ] as const) {
     try {
       setup()

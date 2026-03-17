@@ -68,7 +68,45 @@ export interface OpencodeTab extends TabBase {
   sessionId?: string
 }
 
-export type Tab = ScriptTab | PersistentTab | OpencodeTab
+export interface DiffTab extends TabBase {
+  type: 'diff'
+}
+
+export type Tab = ScriptTab | PersistentTab | OpencodeTab | DiffTab
+
+// Diff data types
+export type DiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed'
+
+export interface DiffRow {
+  type: 'context' | 'add' | 'remove' | 'modify'
+  oldLineNo: number | null
+  newLineNo: number | null
+  oldContent: string | null
+  newContent: string | null
+}
+
+export interface DiffHunk {
+  rows: DiffRow[]
+}
+
+export interface DiffFile {
+  path: string
+  oldPath?: string
+  status: DiffFileStatus
+  additions: number
+  deletions: number
+  binary?: boolean
+  language?: string
+  hunks: DiffHunk[]
+}
+
+export interface DiffResult {
+  files: DiffFile[]
+  totalAdditions: number
+  totalDeletions: number
+  hasDifftastic: boolean
+  error?: string
+}
 
 export interface AppState {
   projects: Project[]
