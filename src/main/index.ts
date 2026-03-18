@@ -3,7 +3,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, screen, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
 import { setupDiffIpc } from './ipc/diff'
-import { killAllOpencodeServers, setupOpencodeIpc } from './ipc/opencode'
+import { setupOpencodeIpc } from './ipc/opencode'
 import { setupProjectIpc } from './ipc/project'
 import { getSettingsStore, setupSettingsIpc } from './ipc/settings'
 import { killAllTerminals, setupTerminalIpc } from './ipc/terminal'
@@ -43,10 +43,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => mainWindow.show())
-  mainWindow.on('close', () => {
-    killAllTerminals()
-    void killAllOpencodeServers()
-  })
+  mainWindow.on('close', killAllTerminals)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -84,6 +81,8 @@ function ensureLoopbackNoProxy(): void {
     process.env[key] = entries.join(',')
   }
 }
+
+app.on('before-quit', killAllTerminals)
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.frisksitron.uwu')

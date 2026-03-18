@@ -4,7 +4,6 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk/v2'
 import { type BrowserWindow, ipcMain } from 'electron'
-import treeKill from 'tree-kill'
 
 interface SharedServer {
   client: OpencodeClient
@@ -18,16 +17,17 @@ let eventForwardingStarted = false
 
 export async function killAllOpencodeServers(): Promise<void> {
   if (!server) return
-  server.abortController.abort()
-  try {
-    await server.client.global.dispose()
-  } catch {
-    /* best effort */
-  }
-  if (server.proc?.pid) treeKill(server.proc.pid)
+  const s = server
   server = null
   serverStartPromise = null
   eventForwardingStarted = false
+  s.abortController.abort()
+  s.proc?.kill()
+  try {
+    await s.client.global.dispose()
+  } catch {
+    /* best effort */
+  }
 }
 
 async function getAvailablePort(): Promise<number> {
@@ -65,7 +65,6 @@ function spawnServer(port: number, password: string): ChildProcess {
       String(port)
     ],
     {
-      shell: true,
       env: {
         ...process.env,
         OPENCODE_CLIENT: 'uwu',
@@ -161,7 +160,7 @@ async function ensureServer(): Promise<OpencodeClient> {
         return s
       } catch (err) {
         // Kill the spawned process if startup failed to avoid zombies
-        if (proc?.pid) treeKill(proc.pid)
+        proc?.kill()
         serverStartPromise = null
         throw err
       }
