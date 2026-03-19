@@ -22,7 +22,7 @@ function statusIcon(status: DiffFile['status']): JSX.Element {
 export default function DiffFileList(props: DiffFileListProps): JSX.Element {
   return (
     <div class="diff-file-list h-full overflow-y-auto bg-sidebar">
-      <div class="px-2 py-1.5 text-[10px] text-muted uppercase tracking-wider font-semibold border-b border-border">
+      <div class="px-2 py-1.5 text-[11px] text-muted uppercase tracking-wider font-semibold border-b border-border">
         Files ({props.files.length})
       </div>
       <For each={props.files}>
@@ -37,10 +37,10 @@ export default function DiffFileList(props: DiffFileListProps): JSX.Element {
             <span class="text-[11px] text-content truncate flex-1 font-mono">{file.path}</span>
             <span class="flex items-center gap-1 text-[10px] font-mono flex-shrink-0">
               <Show when={file.additions > 0}>
-                <span class="text-success">+{file.additions}</span>
+                <span class="text-diff-add">+{file.additions}</span>
               </Show>
               <Show when={file.deletions > 0}>
-                <span class="text-error">-{file.deletions}</span>
+                <span class="text-diff-remove">-{file.deletions}</span>
               </Show>
             </span>
           </button>

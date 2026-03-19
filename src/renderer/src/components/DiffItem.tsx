@@ -13,11 +13,14 @@ export default function DiffItem(props: DiffItemProps): JSX.Element {
   const ctx = useProject()
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: complex interactive container with nested content
     <div
-      role="menuitem"
+      role="button"
       tabIndex={0}
       class="group/diff relative cursor-pointer text-content text-[13px] hover:bg-hover"
-      classList={{ 'bg-active': ctx.isDiffActive(props.cwd) }}
+      classList={{
+        'bg-active': ctx.isDiffActive(props.cwd)
+      }}
       onClick={() => ctx.onOpenDiff(props.cwd)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') ctx.onOpenDiff(props.cwd)

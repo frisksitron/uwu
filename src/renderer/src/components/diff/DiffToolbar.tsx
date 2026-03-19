@@ -2,17 +2,13 @@ import { PanelLeftClose, PanelLeftOpen, RefreshCw } from 'lucide-solid'
 import { For, type JSX } from 'solid-js'
 
 export type DiffMode = 'unstaged' | 'staged' | 'all'
-export type ViewMode = 'unified' | 'split'
-
 interface DiffToolbarProps {
   diffMode: DiffMode
-  viewMode: ViewMode
   totalAdditions: number
   totalDeletions: number
   loading: boolean
   fileListCollapsed: boolean
   onDiffModeChange: (mode: DiffMode) => void
-  onViewModeChange: (mode: ViewMode) => void
   onRefresh: () => void
   onToggleFileList: () => void
 }
@@ -65,15 +61,6 @@ export default function DiffToolbar(props: DiffToolbarProps): JSX.Element {
         onChange={(v) => props.onDiffModeChange(v as DiffMode)}
       />
 
-      <ToggleGroup
-        options={[
-          { value: 'unified', label: 'Unified' },
-          { value: 'split', label: 'Split' }
-        ]}
-        value={props.viewMode}
-        onChange={(v) => props.onViewModeChange(v as ViewMode)}
-      />
-
       <button
         type="button"
         class="p-1 rounded text-muted hover:text-content hover:bg-hover transition-colors"
@@ -84,8 +71,8 @@ export default function DiffToolbar(props: DiffToolbarProps): JSX.Element {
       </button>
 
       <div class="ml-auto flex items-center gap-2 text-[11px] font-mono">
-        {props.totalAdditions > 0 && <span class="text-success">+{props.totalAdditions}</span>}
-        {props.totalDeletions > 0 && <span class="text-error">-{props.totalDeletions}</span>}
+        {props.totalAdditions > 0 && <span class="text-diff-add">+{props.totalAdditions}</span>}
+        {props.totalDeletions > 0 && <span class="text-diff-remove">-{props.totalDeletions}</span>}
       </div>
     </div>
   )

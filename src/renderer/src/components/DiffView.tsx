@@ -1,9 +1,8 @@
-import { GitCompareArrows, Info } from 'lucide-solid'
+import { GitCompareArrows } from 'lucide-solid'
 import { createSignal, type JSX, onMount, Show } from 'solid-js'
 import type { DiffResult } from '../../../shared/types'
 import DiffFileList from './diff/DiffFileList'
-import DiffSplitView from './diff/DiffSplitView'
-import DiffToolbar, { type DiffMode, type ViewMode } from './diff/DiffToolbar'
+import DiffToolbar, { type DiffMode } from './diff/DiffToolbar'
 import DiffUnifiedView from './diff/DiffUnifiedView'
 
 interface DiffViewProps {
@@ -17,7 +16,6 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
   const [diffResult, setDiffResult] = createSignal<DiffResult | null>(null)
   const [loading, setLoading] = createSignal(false)
   const [diffMode, setDiffMode] = createSignal<DiffMode>('unstaged')
-  const [viewMode, setViewMode] = createSignal<ViewMode>('unified')
   const [selectedFileIdx, setSelectedFileIdx] = createSignal(0)
   const [fileListWidth, setFileListWidth] = createSignal(200)
   const [fileListCollapsed, setFileListCollapsed] = createSignal(false)
@@ -36,7 +34,6 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
         files: [],
         totalAdditions: 0,
         totalDeletions: 0,
-        hasDifftastic: false,
         error: (err as Error).message
       })
     } finally {
@@ -83,26 +80,14 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
     >
       <DiffToolbar
         diffMode={diffMode()}
-        viewMode={viewMode()}
         totalAdditions={result()?.totalAdditions ?? 0}
         totalDeletions={result()?.totalDeletions ?? 0}
         loading={loading()}
         onDiffModeChange={handleDiffModeChange}
-        onViewModeChange={setViewMode}
         onRefresh={fetchDiff}
         fileListCollapsed={fileListCollapsed()}
         onToggleFileList={() => setFileListCollapsed((c) => !c)}
       />
-
-      <Show when={result() && !result()?.hasDifftastic && !result()?.error}>
-        <div class="flex items-center gap-1.5 px-3 py-1 bg-sidebar/50 border-b border-border/40 text-[10px] text-muted">
-          <Info size={11} />
-          <span>
-            Using basic git diff. Install <span class="font-semibold">difftastic</span> for
-            structural diffs.
-          </span>
-        </div>
-      </Show>
 
       <Show when={result()?.error}>
         <div class="px-3 py-2 text-[11px] text-error bg-error/5 border-b border-error/20">
@@ -115,9 +100,12 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
         fallback={
           <div class="flex-1 flex flex-col items-center justify-center gap-2 text-muted select-none">
             <GitCompareArrows size={28} class="opacity-40" />
-            <p class="text-[12px] opacity-60">
+            <p class="text-[13px] opacity-60">
               {loading() ? 'Loading diff...' : 'No changes detected'}
             </p>
+            <Show when={!loading()}>
+              <p class="text-[11px] opacity-40">Switch between Unstaged, Staged, and All above</p>
+            </Show>
           </div>
         }
       >
@@ -143,15 +131,19 @@ export default function DiffView(props: DiffViewProps): JSX.Element {
               aria-valuemax={400}
               class="w-1 flex-shrink-0 bg-border hover:bg-accent cursor-col-resize transition-colors"
               onMouseDown={startResize}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowLeft') {
+                  e.preventDefault()
+                  setFileListWidth((w) => Math.max(w - 10, 120))
+                } else if (e.key === 'ArrowRight') {
+                  e.preventDefault()
+                  setFileListWidth((w) => Math.min(w + 10, 400))
+                }
+              }}
             />
           </Show>
           <div class="flex-1 overflow-y-auto">
-            <Show
-              when={viewMode() === 'unified'}
-              fallback={<DiffSplitView files={files()} fileRefs={fileRefs} />}
-            >
-              <DiffUnifiedView files={files()} fileRefs={fileRefs} />
-            </Show>
+            <DiffUnifiedView files={files()} fileRefs={fileRefs} />
           </div>
         </div>
       </Show>

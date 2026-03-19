@@ -98,7 +98,7 @@ function FileSection(props: {
                         <tr class="diff-hunk-sep">
                           <td
                             colspan={3}
-                            class="px-2 py-0.5 text-[10px] text-muted bg-hover/50 border-y border-border/40"
+                            class="px-2 py-0.5 text-[11px] text-muted bg-hover/50 border-y border-border/40"
                           >
                             ···
                           </td>
