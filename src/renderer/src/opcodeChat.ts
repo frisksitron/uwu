@@ -1,11 +1,8 @@
 import { createStore, produce } from 'solid-js/store'
+import { updateSessionTitle } from './opcodeProject'
+import { setServerError } from './opcodeServer'
 
-export interface OcSession {
-  id: string
-  title: string
-  createdAt: number
-  updatedAt: number
-}
+// --- Types ---
 
 export interface OcTextPart {
   id: string
@@ -122,15 +119,9 @@ export interface RawEvent {
   data: unknown
 }
 
-export interface SlashCommand {
-  name: string
-  description: string
-  source: 'command' | 'mcp' | 'skill'
-}
+// --- State ---
 
-interface OpencodeState {
-  servers: Record<string, 'starting' | 'ready' | 'error' | 'stopped'>
-  sessions: Record<string, OcSession[]>
+interface OpcodeChatState {
   messages: Record<string, OcMessage[]>
   pendingPermissions: Record<string, OcPermission[]>
   pendingQuestions: Record<string, OcQuestion[]>
@@ -143,16 +134,13 @@ interface OpencodeState {
   sessionModels: Record<string, { providerID: string; modelID: string }>
   sessionVariants: Record<string, string>
   rawEvents: RawEvent[]
-  slashCommands: Record<string, SlashCommand[]>
 }
 
 const MAX_RAW_EVENTS = 500
 
 let streamingRafPending = false
 
-const [state, setState] = createStore<OpencodeState>({
-  servers: {},
-  sessions: {},
+const [state, setState] = createStore<OpcodeChatState>({
   messages: {},
   pendingPermissions: {},
   pendingQuestions: {},
@@ -164,61 +152,12 @@ const [state, setState] = createStore<OpencodeState>({
   sessionAgents: {},
   sessionModels: {},
   sessionVariants: {},
-  rawEvents: [],
-  slashCommands: {}
+  rawEvents: []
 })
 
-export { state as opencodeState }
+export { state as opcodeChat }
 
-export async function startServer(projectPath: string): Promise<boolean> {
-  if (state.servers[projectPath] === 'ready' || state.servers[projectPath] === 'starting') {
-    return state.servers[projectPath] === 'ready'
-  }
-  setState('servers', projectPath, 'starting')
-  const result = await window.opencodeAPI.start(projectPath)
-  if (result.status === 'ready') {
-    setState('servers', projectPath, 'ready')
-    return true
-  }
-  setState('servers', projectPath, 'error')
-  return false
-}
-
-export async function loadSessions(projectPath: string): Promise<void> {
-  const data = (await window.opencodeAPI.sessionList(projectPath)) as Array<{
-    id: string
-    title: string
-    time: { created: number; updated: number }
-  }> | null
-  if (!data) return
-  const sessions: OcSession[] = data.map((s) => ({
-    id: s.id,
-    title: s.title || 'Untitled',
-    createdAt: s.time.created,
-    updatedAt: s.time.updated
-  }))
-  setState('sessions', projectPath, sessions)
-}
-
-export async function createSession(
-  projectPath: string,
-  title?: string
-): Promise<OcSession | null> {
-  const data = (await window.opencodeAPI.sessionCreate(projectPath, title)) as {
-    id: string
-    title: string
-    time: { created: number; updated: number }
-  } | null
-  if (!data) return null
-  const session: OcSession = {
-    id: data.id,
-    title: data.title || 'Untitled',
-    createdAt: data.time.created,
-    updatedAt: data.time.updated
-  }
-  setState('sessions', projectPath, (prev) => [...(prev || []), session])
-  return session
-}
+// --- Internal helpers ---
 
 type RawError = {
   name: string
@@ -239,61 +178,6 @@ function parseError(raw: RawError): OcMessageError {
     isRetryable: raw.data?.isRetryable,
     providerID: raw.data?.providerID,
     retries: raw.data?.retries
-  }
-}
-
-export async function loadMessages(projectPath: string, sessionId: string): Promise<void> {
-  const data = (await window.opencodeAPI.messages(projectPath, sessionId)) as Array<{
-    info: {
-      id: string
-      sessionID: string
-      role: 'user' | 'assistant'
-      time: { created: number }
-      agent?: string
-      model?: { providerID: string; modelID: string }
-      variant?: string
-      error?: RawError
-    }
-    parts: Array<{
-      id: string
-      messageID: string
-      type: string
-      text?: string
-      tool?: string
-      state?: {
-        status: string
-        input?: Record<string, unknown>
-        output?: string
-        error?: string
-        title?: string
-        metadata?: Record<string, unknown>
-      }
-      mime?: string
-      filename?: string
-      url?: string
-    }>
-  }> | null
-  if (!data) return
-  const messages: OcMessage[] = data.map((m) => ({
-    id: m.info.id,
-    sessionID: m.info.sessionID,
-    role: m.info.role,
-    createdAt: m.info.time.created,
-    parts: parseParts(m.parts),
-    error: m.info.error ? parseError(m.info.error) : undefined
-  }))
-  setState('messages', sessionId, messages)
-
-  // Extract agent/model from last user message as the session's active values
-  const lastUser = data.findLast((m) => m.info.role === 'user')
-  if (lastUser?.info.agent) {
-    setState('sessionAgents', sessionId, lastUser.info.agent)
-  }
-  if (lastUser?.info.model) {
-    setState('sessionModels', sessionId, lastUser.info.model)
-  }
-  if (lastUser?.info.variant) {
-    setState('sessionVariants', sessionId, lastUser.info.variant)
   }
 }
 
@@ -375,6 +259,96 @@ function parseParts(raw: RawPart[]): OcPart[] {
   return parts
 }
 
+function upsertPart(raw: RawPart & { sessionID: string }): void {
+  setState(
+    produce((s: OpcodeChatState) => {
+      const msgs = s.messages[raw.sessionID]
+      if (!msgs) return
+      const msg = msgs.find((m) => m.id === raw.messageID)
+      if (!msg) return
+
+      const parsed = parseParts([raw])
+      if (parsed.length === 0) return
+      const newPart = parsed[0]
+
+      const existingIdx = msg.parts.findIndex((p) => p.id === raw.id)
+      if (existingIdx !== -1) {
+        const existing = msg.parts[existingIdx]
+        if (
+          (newPart.type === 'text' && existing.type === 'text') ||
+          (newPart.type === 'reasoning' && existing.type === 'reasoning')
+        ) {
+          existing.text = s.streamingContent[raw.id] || newPart.text
+          if (newPart.type === 'reasoning' && existing.type === 'reasoning') {
+            existing.startTime = newPart.startTime
+            existing.endTime = newPart.endTime
+          }
+        } else {
+          msg.parts[existingIdx] = newPart
+        }
+      } else {
+        msg.parts.push(newPart)
+      }
+    })
+  )
+}
+
+// --- Public API ---
+
+export async function loadMessages(projectPath: string, sessionId: string): Promise<void> {
+  const data = (await window.opencodeAPI.messages(projectPath, sessionId)) as Array<{
+    info: {
+      id: string
+      sessionID: string
+      role: 'user' | 'assistant'
+      time: { created: number }
+      agent?: string
+      model?: { providerID: string; modelID: string }
+      variant?: string
+      error?: RawError
+    }
+    parts: Array<{
+      id: string
+      messageID: string
+      type: string
+      text?: string
+      tool?: string
+      state?: {
+        status: string
+        input?: Record<string, unknown>
+        output?: string
+        error?: string
+        title?: string
+        metadata?: Record<string, unknown>
+      }
+      mime?: string
+      filename?: string
+      url?: string
+    }>
+  }> | null
+  if (!data) return
+  const messages: OcMessage[] = data.map((m) => ({
+    id: m.info.id,
+    sessionID: m.info.sessionID,
+    role: m.info.role,
+    createdAt: m.info.time.created,
+    parts: parseParts(m.parts),
+    error: m.info.error ? parseError(m.info.error) : undefined
+  }))
+  setState('messages', sessionId, messages)
+
+  const lastUser = data.findLast((m) => m.info.role === 'user')
+  if (lastUser?.info.agent) {
+    setState('sessionAgents', sessionId, lastUser.info.agent)
+  }
+  if (lastUser?.info.model) {
+    setState('sessionModels', sessionId, lastUser.info.model)
+  }
+  if (lastUser?.info.variant) {
+    setState('sessionVariants', sessionId, lastUser.info.variant)
+  }
+}
+
 export async function sendMessage(
   projectPath: string,
   sessionId: string,
@@ -401,7 +375,6 @@ export async function sendMessage(
     }
     await window.opencodeAPI.sendMessage(projectPath, sessionId, {
       parts,
-      // Unwrap potential Solid store proxies — IPC structured clone can't serialize them
       model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
       agent,
       variant
@@ -415,90 +388,6 @@ export async function sendMessage(
 export async function abortGeneration(projectPath: string, sessionId: string): Promise<void> {
   await window.opencodeAPI.sessionAbort(projectPath, sessionId)
   setState('isGenerating', sessionId, false)
-}
-
-export async function loadSlashCommands(projectPath: string): Promise<void> {
-  try {
-    const commands = (await window.opencodeAPI.commands(projectPath)) as Array<{
-      name: string
-      description?: string
-      source?: 'command' | 'mcp' | 'skill'
-    }> | null
-
-    const result: SlashCommand[] = []
-    if (commands) {
-      for (const c of commands) {
-        result.push({
-          name: c.name,
-          description: c.description || '',
-          source: c.source || 'command'
-        })
-      }
-    }
-    setState('slashCommands', projectPath, result)
-  } catch (err) {
-    console.error('[opencode] Failed to load slash commands:', err)
-  }
-}
-
-export function getSlashCommands(projectPath: string): SlashCommand[] {
-  return state.slashCommands[projectPath] || []
-}
-
-export function getOcActivity(sessionId: string): string {
-  // Read streamingVersion to subscribe to batched streaming updates
-  void state.streamingVersion
-
-  // 1. Pending permissions
-  const perms = state.pendingPermissions[sessionId]
-  if (perms && perms.length > 0) {
-    return `Approve: ${perms[0].title}`
-  }
-
-  // 2. Pending questions
-  const questions = state.pendingQuestions[sessionId]
-  if (questions && questions.length > 0) {
-    return questions[0].questions[0]?.header || 'Question'
-  }
-
-  // 3-7. Generating states
-  if (state.isGenerating[sessionId]) {
-    const msgs = state.messages[sessionId]
-    if (msgs) {
-      const lastAssistant = msgs.findLast((m) => m.role === 'assistant')
-      if (lastAssistant) {
-        const runningTool = lastAssistant.parts.findLast(
-          (p) => p.type === 'tool' && p.state.status === 'running'
-        )
-        if (runningTool && runningTool.type === 'tool') {
-          return `Running ${runningTool.tool}`
-        }
-
-        const pendingTool = lastAssistant.parts.findLast(
-          (p) => p.type === 'tool' && p.state.status === 'pending'
-        )
-        if (pendingTool && pendingTool.type === 'tool') {
-          return `Pending ${pendingTool.tool}`
-        }
-
-        const reasoning = lastAssistant.parts.findLast((p) => p.type === 'reasoning' && !p.endTime)
-        if (reasoning) {
-          return 'Thinking'
-        }
-
-        const hasStreaming = lastAssistant.parts.some(
-          (p) => (p.type === 'text' || p.type === 'reasoning') && state.streamingContent[p.id]
-        )
-        if (hasStreaming) {
-          return 'Responding'
-        }
-      }
-    }
-    return 'Thinking'
-  }
-
-  // 8. Not generating
-  return 'Ready'
 }
 
 export async function executeCommand(
@@ -546,9 +435,8 @@ export async function respondQuestion(
   answers: Array<Array<string>>
 ): Promise<void> {
   await window.opencodeAPI.questionReply(projectPath, requestId, answers)
-  // Remove from all session lists
   setState(
-    produce((s: OpencodeState) => {
+    produce((s: OpcodeChatState) => {
       for (const key of Object.keys(s.pendingQuestions)) {
         s.pendingQuestions[key] = s.pendingQuestions[key].filter((q) => q.id !== requestId)
       }
@@ -559,7 +447,7 @@ export async function respondQuestion(
 export async function rejectQuestion(projectPath: string, requestId: string): Promise<void> {
   await window.opencodeAPI.questionReject(projectPath, requestId)
   setState(
-    produce((s: OpencodeState) => {
+    produce((s: OpcodeChatState) => {
       for (const key of Object.keys(s.pendingQuestions)) {
         s.pendingQuestions[key] = s.pendingQuestions[key].filter((q) => q.id !== requestId)
       }
@@ -567,17 +455,69 @@ export async function rejectQuestion(projectPath: string, requestId: string): Pr
   )
 }
 
+export function getOcActivity(sessionId: string): string {
+  void state.streamingVersion
+
+  const perms = state.pendingPermissions[sessionId]
+  if (perms && perms.length > 0) {
+    return `Approve: ${perms[0].title}`
+  }
+
+  const questions = state.pendingQuestions[sessionId]
+  if (questions && questions.length > 0) {
+    return questions[0].questions[0]?.header || 'Question'
+  }
+
+  if (state.isGenerating[sessionId]) {
+    const msgs = state.messages[sessionId]
+    if (msgs) {
+      const lastAssistant = msgs.findLast((m) => m.role === 'assistant')
+      if (lastAssistant) {
+        const runningTool = lastAssistant.parts.findLast(
+          (p) => p.type === 'tool' && p.state.status === 'running'
+        )
+        if (runningTool && runningTool.type === 'tool') {
+          return `Running ${runningTool.tool}`
+        }
+
+        const pendingTool = lastAssistant.parts.findLast(
+          (p) => p.type === 'tool' && p.state.status === 'pending'
+        )
+        if (pendingTool && pendingTool.type === 'tool') {
+          return `Pending ${pendingTool.tool}`
+        }
+
+        const reasoning = lastAssistant.parts.findLast((p) => p.type === 'reasoning' && !p.endTime)
+        if (reasoning) {
+          return 'Thinking'
+        }
+
+        const hasStreaming = lastAssistant.parts.some(
+          (p) => (p.type === 'text' || p.type === 'reasoning') && state.streamingContent[p.id]
+        )
+        if (hasStreaming) {
+          return 'Responding'
+        }
+      }
+    }
+    return 'Thinking'
+  }
+
+  return 'Ready'
+}
+
+// --- Event listener ---
+
 export function initEventListener(): () => void {
-  const cleanupError = window.opencodeAPI.onEventError((projectPath: string, _error: string) => {
-    setState('servers', projectPath, 'error')
+  const cleanupError = window.opencodeAPI.onEventError((_projectPath: string, _error: string) => {
+    setServerError()
   })
   const cleanupEvent = window.opencodeAPI.onEvent((_projectPath: string, rawEvent: unknown) => {
     const event = rawEvent as { type: string; properties: Record<string, unknown> }
     if (!event?.type) return
 
-    // Log raw event for debug view
     setState(
-      produce((s: OpencodeState) => {
+      produce((s: OpcodeChatState) => {
         s.rawEvents.push({
           timestamp: Date.now(),
           type: event.type,
@@ -613,7 +553,6 @@ export function initEventListener(): () => void {
             url?: string
           }
         }
-        // Upsert part into message
         upsertPart(props.part)
         break
       }
@@ -654,7 +593,6 @@ export function initEventListener(): () => void {
         }
         const msg = props.info
 
-        // Track active agent/model/variant from user messages
         if (msg.role === 'user') {
           if (msg.agent) setState('sessionAgents', msg.sessionID, msg.agent)
           if (msg.model) setState('sessionModels', msg.sessionID, msg.model)
@@ -663,7 +601,7 @@ export function initEventListener(): () => void {
         const error: OcMessageError | undefined = msg.error ? parseError(msg.error) : undefined
 
         setState(
-          produce((s: OpencodeState) => {
+          produce((s: OpcodeChatState) => {
             const msgs = s.messages[msg.sessionID]
             if (!msgs) {
               s.messages[msg.sessionID] = [
@@ -707,14 +645,12 @@ export function initEventListener(): () => void {
       case 'session.idle': {
         const props = event.properties as { sessionID: string }
         setState('isGenerating', props.sessionID, false)
-        // Compute generation duration
         const startTime = state.generationStartTimes[props.sessionID]
         if (startTime) {
           setState('generationDurations', props.sessionID, Date.now() - startTime)
         }
-        // Finalize streaming content into parts
         setState(
-          produce((s: OpencodeState) => {
+          produce((s: OpcodeChatState) => {
             const msgs = s.messages[props.sessionID]
             if (!msgs) return
             for (const msg of msgs) {
@@ -808,19 +744,7 @@ export function initEventListener(): () => void {
         const props = event.properties as {
           info: { id: string; title: string; time: { updated: number } }
         }
-        // Update session title in all project session lists
-        setState(
-          produce((s: OpencodeState) => {
-            for (const key of Object.keys(s.sessions)) {
-              const sessions = s.sessions[key]
-              const idx = sessions.findIndex((ss) => ss.id === props.info.id)
-              if (idx !== -1) {
-                sessions[idx].title = props.info.title || sessions[idx].title
-                sessions[idx].updatedAt = props.info.time.updated
-              }
-            }
-          })
-        )
+        updateSessionTitle(props.info.id, props.info.title, props.info.time.updated)
         break
       }
     }
@@ -829,39 +753,4 @@ export function initEventListener(): () => void {
     cleanupError()
     cleanupEvent()
   }
-}
-
-function upsertPart(raw: RawPart & { sessionID: string }): void {
-  setState(
-    produce((s: OpencodeState) => {
-      const msgs = s.messages[raw.sessionID]
-      if (!msgs) return
-      const msg = msgs.find((m) => m.id === raw.messageID)
-      if (!msg) return
-
-      const parsed = parseParts([raw])
-      if (parsed.length === 0) return
-      const newPart = parsed[0]
-
-      const existingIdx = msg.parts.findIndex((p) => p.id === raw.id)
-      if (existingIdx !== -1) {
-        const existing = msg.parts[existingIdx]
-        if (
-          (newPart.type === 'text' && existing.type === 'text') ||
-          (newPart.type === 'reasoning' && existing.type === 'reasoning')
-        ) {
-          // Use streaming content if available, otherwise use the final text
-          existing.text = s.streamingContent[raw.id] || newPart.text
-          if (newPart.type === 'reasoning' && existing.type === 'reasoning') {
-            existing.startTime = newPart.startTime
-            existing.endTime = newPart.endTime
-          }
-        } else {
-          msg.parts[existingIdx] = newPart
-        }
-      } else {
-        msg.parts.push(newPart)
-      }
-    })
-  )
 }
