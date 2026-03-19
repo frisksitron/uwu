@@ -6,5 +6,6 @@ out
 *.log*
 dev-app-update.yml
 .claude/
+.impeccable.md
 .vscode/settings.json
 .vscode/launch.json
