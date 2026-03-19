@@ -24,6 +24,7 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@fontsource-variable/nunito": "^5.2.7",
     "@opencode-ai/sdk": "^1.2.26",
     "arktype": "^2.2.0",
     "electron-store": "^11.0.2",
@@ -31,7 +32,6 @@
     "lucide-solid": "^0.577.0",
     "node-pty": "^1.0.0",
     "shiki": "^4.0.2",
-    "smol-toml": "^1.6.0",
     "solid-markdown": "^2.1.1"
   },
   "devDependencies": {

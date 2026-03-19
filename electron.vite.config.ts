@@ -7,7 +7,7 @@ export default defineConfig({
   main: {
     build: {
       externalizeDeps: {
-        exclude: ['electron-updater', 'electron-store', '@electron-toolkit/utils', 'smol-toml']
+        exclude: ['electron-updater', 'electron-store', '@electron-toolkit/utils']
       }
     }
   },
