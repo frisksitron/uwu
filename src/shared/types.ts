@@ -19,12 +19,6 @@ interface WorkspaceTabBase {
 export interface ScriptTab extends WorkspaceTabBase {
   type: 'script'
   name: string
-  hidden?: boolean
-}
-
-export interface CustomScriptTab extends WorkspaceTabBase {
-  type: 'custom-script'
-  name: string
   command: string
 }
 
@@ -40,22 +34,19 @@ export interface OpencodeTab extends WorkspaceTabBase {
   sessionId?: string
 }
 
-export type WorkspaceTab = ScriptTab | CustomScriptTab | TerminalTab | OpencodeTab
+export type WorkspaceTab = ScriptTab | TerminalTab | OpencodeTab
 
 // Runtime only — returned from main process, not persisted
 export interface WorktreeInfo {
   path: string
   branch: string
   isMain: boolean
-  scripts: Record<string, string>
 }
 
 export interface Project {
   id: string
   name: string
   path: string
-  scripts: Record<string, string>
-  projectType: string
   collapsed: boolean
   workspaces: Record<string, WorkspaceTab[]>
   shellOverride?: string
@@ -97,7 +88,6 @@ export interface DiffResult {
   files: DiffFile[]
   totalAdditions: number
   totalDeletions: number
-  hasDifftastic: boolean
   error?: string
 }
 
@@ -127,6 +117,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     cycleTabBackward: { key: 'Tab', ctrlKey: true, shiftKey: true, altKey: false },
     toggleSidebar: { key: 'b', ctrlKey: true, shiftKey: false, altKey: false },
     closeTab: { key: 'w', ctrlKey: true, shiftKey: false, altKey: false },
-    openSettings: { key: ',', ctrlKey: true, shiftKey: false, altKey: false }
+    openSettings: { key: ',', ctrlKey: true, shiftKey: false, altKey: false },
+    cycleAgent: { key: 'A', ctrlKey: true, shiftKey: true, altKey: false }
   }
 }

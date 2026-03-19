@@ -16,7 +16,8 @@ export const KeyboardShortcutsSchema = type({
   cycleTabBackward: KeyBindingSchema,
   toggleSidebar: KeyBindingSchema,
   closeTab: KeyBindingSchema,
-  openSettings: KeyBindingSchema
+  openSettings: KeyBindingSchema,
+  cycleAgent: KeyBindingSchema
 })
 
 export type KeyboardShortcuts = typeof KeyboardShortcutsSchema.infer
@@ -37,7 +38,8 @@ export const WindowSettingsSchema = type({
     y: 'number',
     width: 'number',
     height: 'number'
-  }
+  },
+  'isMaximized?': 'boolean'
 })
 
 export type WindowSettings = typeof WindowSettingsSchema.infer
@@ -56,13 +58,6 @@ export const ScriptWorkspaceTabSchema = type({
   id: 'string',
   type: "'script'",
   name: 'string',
-  'hidden?': 'boolean'
-})
-
-export const CustomScriptWorkspaceTabSchema = type({
-  id: 'string',
-  type: "'custom-script'",
-  name: 'string',
   command: 'string'
 })
 
@@ -80,9 +75,9 @@ export const OpencodeWorkspaceTabSchema = type({
   'sessionId?': 'string'
 })
 
-export const WorkspaceTabSchema = ScriptWorkspaceTabSchema.or(CustomScriptWorkspaceTabSchema)
-  .or(TerminalWorkspaceTabSchema)
-  .or(OpencodeWorkspaceTabSchema)
+export const WorkspaceTabSchema = ScriptWorkspaceTabSchema.or(TerminalWorkspaceTabSchema).or(
+  OpencodeWorkspaceTabSchema
+)
 
 export type WorkspaceTab = typeof WorkspaceTabSchema.infer
 
@@ -92,8 +87,6 @@ export const ProjectEntrySchema = type({
   id: 'string',
   name: 'string',
   path: 'string',
-  scripts: 'Record<string, string>',
-  projectType: 'string',
   collapsed: 'boolean',
   'workspaces?': 'Record<string, unknown>',
   'shellOverride?': 'string',

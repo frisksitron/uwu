@@ -48,13 +48,6 @@ const projectAPI = {
   selectFolder: (): Promise<string | null> => ipcRenderer.invoke('project:select-folder'),
   selectFiles: (defaultPath: string): Promise<string[]> =>
     ipcRenderer.invoke('project:select-files', defaultPath),
-  readMetadata: (
-    p: string
-  ): Promise<{
-    name: string
-    scripts: Record<string, string>
-    projectType: string
-  } | null> => ipcRenderer.invoke('project:read-metadata', p),
   loadProjects: (): Promise<import('../shared/types').Project[]> =>
     ipcRenderer.invoke('projects:load'),
   saveProjects: (projects: import('../shared/types').ProjectEntry[]): Promise<void> =>

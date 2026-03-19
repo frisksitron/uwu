@@ -32,11 +32,6 @@ interface TerminalAPI {
 interface ProjectAPI {
   selectFolder: () => Promise<string | null>
   selectFiles: (defaultPath: string) => Promise<string[]>
-  readMetadata: (folderPath: string) => Promise<{
-    name: string
-    scripts: Record<string, string>
-    projectType: string
-  } | null>
   loadProjects: () => Promise<import('../shared/types').Project[]>
   saveProjects: (projects: import('../shared/types').ProjectEntry[]) => Promise<void>
 }
