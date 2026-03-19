@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, type JSX, Show } from 'solid-js'
-import type { SlashCommand } from '../../opencodeStore'
+import type { SlashCommand } from '../../opcodeProject'
 
 export interface SlashMenuHandle {
   handleKeyDown: (e: KeyboardEvent) => boolean
@@ -65,7 +65,7 @@ export default function SlashMenu(props: SlashMenuProps): JSX.Element {
             {(cmd, index) => (
               <button
                 type="button"
-                class="w-full text-left px-3 py-1.5 text-[12px] flex items-center gap-2 transition-colors cursor-pointer border-none"
+                class="w-full text-left px-3 py-1.5 text-[13px] flex items-center gap-2 transition-colors cursor-pointer border-none"
                 classList={{
                   'bg-accent/15 text-content': index() === selectedIndex(),
                   'bg-transparent text-content hover:bg-hover': index() !== selectedIndex()

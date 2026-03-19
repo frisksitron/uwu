@@ -1,6 +1,6 @@
 import { Check, Sparkles, X } from 'lucide-solid'
 import { createSignal, For, type JSX, Show } from 'solid-js'
-import type { OcQuestion } from '../../opencodeStore'
+import type { OcQuestion } from '../../opcodeChat'
 
 interface QuestionBannerProps {
   questions: OcQuestion[]
@@ -72,11 +72,11 @@ function QuestionItem(props: {
   }
 
   return (
-    <div class="flex flex-col gap-3 text-[12px]">
+    <div class="flex flex-col gap-3 text-[13px]">
       {/* Header */}
       <div class="flex items-center gap-1.5">
         <Sparkles size={12} class="text-heading" />
-        <span class="text-heading text-[10px] font-semibold tracking-wider uppercase">
+        <span class="text-heading text-[11px] font-semibold tracking-wider uppercase">
           Question
         </span>
       </div>
@@ -90,7 +90,7 @@ function QuestionItem(props: {
               'border-t border-border/60 pt-2': qIdx() > 0
             }}
           >
-            <span class="text-content font-semibold text-[12px]">{qi.header}</span>
+            <span class="text-content font-semibold text-[13px]">{qi.header}</span>
             <span class="text-muted text-[11px] leading-relaxed">{qi.question}</span>
 
             {/* Option cards */}
@@ -129,7 +129,7 @@ function QuestionItem(props: {
                         <span class="flex flex-col min-w-0">
                           <span class="truncate">{opt.label}</span>
                           <Show when={opt.description}>
-                            <span class="text-[10px] text-muted truncate">{opt.description}</span>
+                            <span class="text-[11px] text-muted truncate">{opt.description}</span>
                           </Show>
                         </span>
                       </button>
@@ -146,7 +146,7 @@ function QuestionItem(props: {
                 placeholder="Custom answer..."
                 value={customTexts()[qIdx()]}
                 onInput={(e) => setCustomText(qIdx(), e.currentTarget.value)}
-                class="bg-app border border-border rounded-md px-2.5 py-1.5 text-[12px] text-content outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 w-full max-w-xs placeholder:text-muted/50 transition-colors"
+                class="bg-app border border-border rounded-md px-2.5 py-1.5 text-[13px] text-content outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 w-full max-w-xs placeholder:text-muted/50 transition-colors"
               />
             </Show>
           </div>

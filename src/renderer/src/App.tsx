@@ -18,7 +18,7 @@ import Sidebar from './components/Sidebar'
 import Terminal from './components/Terminal'
 import TitleBar from './components/TitleBar'
 import UpdateBanner from './components/UpdateBanner'
-import { initEventListener } from './opencodeStore'
+import { initEventListener } from './opcodeChat'
 import { clearOutput } from './outputStore'
 import {
   dismissCorrupted,
@@ -257,15 +257,8 @@ export default function App(): JSX.Element {
     }
   }
 
-  function getItemCommand(item: WorkspaceTab, projectId: string, cwd: string): string {
-    if (item.type === 'custom-script') return item.command
-    if (item.type === 'script') {
-      const project = store.projects.find((p) => p.id === projectId)
-      if (!project) return ''
-      const wt = project.worktrees?.find((w) => w.path === cwd)
-      const scripts = wt?.scripts ?? project.scripts
-      return scripts[item.name] ?? ''
-    }
+  function getItemCommand(item: WorkspaceTab): string {
+    if (item.type === 'script') return item.command
     return ''
   }
 
@@ -288,13 +281,13 @@ export default function App(): JSX.Element {
         />
       )
     }
-    if (item.type === 'script' || item.type === 'custom-script') {
+    if (item.type === 'script') {
       return (
         <ScriptView
           tabId={item.id}
           visible={store.activeTabId === item.id}
           cwd={cwd}
-          command={getItemCommand(item, projectId, cwd)}
+          command={getItemCommand(item)}
           onStatusChange={(status, exitCode) => handleStatusChange(item.id, status, exitCode)}
           shell={proj()?.shellOverride || settings.terminal.defaultShell || undefined}
           extraEnv={proj()?.envVars}
@@ -328,19 +321,19 @@ export default function App(): JSX.Element {
       />
       <UpdateBanner />
       <Show when={settingsCorrupted()}>
-        <div class="flex items-center justify-between px-4 py-2 bg-sidebar border-b border-border text-content text-sm shrink-0">
+        <div class="flex items-center justify-between px-4 py-2 bg-sidebar border-b border-border text-content text-[13px] shrink-0">
           <span>Settings file is corrupted and could not be loaded.</span>
           <div class="flex items-center gap-2">
             <button
               type="button"
-              class="px-3 py-1 rounded bg-accent text-white text-xs font-medium hover:opacity-90 transition-opacity"
+              class="px-3 py-1 rounded bg-accent text-white text-[11px] font-medium hover:opacity-90 transition-opacity"
               onClick={() => resetSettings()}
             >
               Reset settings
             </button>
             <button
               type="button"
-              class="px-3 py-1 rounded bg-hover text-content text-xs font-medium hover:bg-active transition-colors"
+              class="px-3 py-1 rounded bg-hover text-content text-[11px] font-medium hover:bg-active transition-colors"
               onClick={() => dismissCorrupted()}
             >
               Dismiss
@@ -366,6 +359,15 @@ export default function App(): JSX.Element {
             aria-valuemax={500}
             class="w-1 flex-shrink-0 bg-border hover:bg-accent cursor-col-resize transition-colors"
             onMouseDown={startResize}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') {
+                e.preventDefault()
+                setSidebarWidth((w) => Math.max(w - 10, 150))
+              } else if (e.key === 'ArrowRight') {
+                e.preventDefault()
+                setSidebarWidth((w) => Math.min(w + 10, 500))
+              }
+            }}
           />
         </div>
         {/*
@@ -374,7 +376,7 @@ export default function App(): JSX.Element {
          * workspace items via produce().sort() moves DOM nodes instead of
          * recreating components (which would reset terminals/scripts).
          */}
-        <div class="flex-1 relative overflow-hidden">
+        <div class="flex-1 relative overflow-hidden shadow-[inset_1px_1px_3px_0_rgba(0,0,0,0.04)]">
           <For each={store.projects}>
             {(project) => {
               const cwds = createMemo(() => Object.keys(project.workspaces ?? {}))

@@ -1,6 +1,6 @@
 import { Check, Sparkles } from 'lucide-solid'
 import { For, type JSX, Show } from 'solid-js'
-import type { OcPermission } from '../../opencodeStore'
+import type { OcPermission } from '../../opcodeChat'
 
 interface PermissionBannerProps {
   permissions: OcPermission[]
@@ -13,7 +13,7 @@ export default function PermissionBanner(props: PermissionBannerProps): JSX.Elem
       <div class="flex flex-col gap-2">
         <For each={props.permissions}>
           {(perm) => (
-            <div class="flex items-center gap-2 text-[12px]">
+            <div class="flex items-center gap-2 text-[13px]">
               <div class="flex items-center gap-1.5 flex-1 min-w-0">
                 <Sparkles size={12} class="text-heading flex-shrink-0" />
                 <span class="font-medium text-content truncate" title={perm.title}>

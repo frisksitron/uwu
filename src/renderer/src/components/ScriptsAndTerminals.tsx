@@ -30,9 +30,6 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
     })
   }
 
-  const visibleItems = (): WorkspaceTab[] =>
-    props.items.filter((item) => !(item.type === 'script' && item.hidden))
-
   return (
     <>
       {/* Diff changes — floating above draggable list */}
@@ -42,20 +39,9 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
 
       {/* Flat ordered list of workspace items */}
       <DraggableList
-        items={visibleItems()}
+        items={props.items}
         keyFn={(item) => item.id}
-        onReorder={(newItems) => {
-          // Re-insert hidden items at their original positions
-          const hiddenItems = props.items.filter((item) => item.type === 'script' && item.hidden)
-          // Merge: put hidden items back, preserving relative order
-          const result: WorkspaceTab[] = [...newItems]
-          for (const hidden of hiddenItems) {
-            const oldIndex = props.items.indexOf(hidden)
-            const insertAt = Math.min(oldIndex, result.length)
-            result.splice(insertAt, 0, hidden)
-          }
-          ctx.onReorderItems(props.cwd, result)
-        }}
+        onReorder={(newItems) => ctx.onReorderItems(props.cwd, newItems)}
       >
         {(item) => (
           <Switch>
@@ -69,21 +55,7 @@ export default function ScriptsAndTerminals(props: ScriptsAndTerminalsProps): JS
                   status={ctx.getItemStatus(scriptItem().id)}
                   onOpen={() => ctx.onOpenItem(scriptItem(), props.cwd)}
                   onRun={() => ctx.onRunScript(scriptItem(), props.cwd)}
-                  onHide={() => ctx.onHideScript(scriptItem().id, props.cwd)}
-                />
-              )}
-            </Match>
-            <Match when={item.type === 'custom-script' && item}>
-              {(csItem) => (
-                <ScriptItem
-                  item={csItem() as WorkspaceTab & { type: 'custom-script' }}
-                  cwd={props.cwd}
-                  indent={props.indent}
-                  isActive={ctx.isItemActive(csItem().id)}
-                  status={ctx.getItemStatus(csItem().id)}
-                  onOpen={() => ctx.onOpenItem(csItem(), props.cwd)}
-                  onRun={() => ctx.onRunScript(csItem(), props.cwd)}
-                  onRemove={() => ctx.onRemoveItem(csItem().id, props.cwd)}
+                  onRemove={() => ctx.onRemoveItem(scriptItem().id, props.cwd)}
                 />
               )}
             </Match>
@@ -116,11 +88,14 @@ function TerminalSidebarItem(props: {
   const ctx = useProject()
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: complex container with nested interactive children
     <div
-      role="menuitem"
+      role="button"
       tabIndex={0}
       class="group/pt relative cursor-pointer text-content text-[13px] hover:bg-hover"
-      classList={{ 'bg-active': ctx.isItemActive(props.item.id) }}
+      classList={{
+        'bg-active': ctx.isItemActive(props.item.id)
+      }}
       onClick={() => ctx.onOpenItem(props.item, props.cwd)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') ctx.onOpenItem(props.item, props.cwd)
@@ -151,7 +126,7 @@ function TerminalSidebarItem(props: {
                     if (e.key === 'Escape') ctx.onCancelRename()
                   }}
                   onBlur={() => ctx.onConfirmRename(props.item.id, props.cwd)}
-                  class="bg-terminal border border-input text-content py-0 px-1 text-[12px] w-full outline-none min-w-0"
+                  class="bg-terminal border border-input text-content py-0 px-1 text-[13px] w-full outline-none min-w-0"
                 />
               </Show>
             </span>
@@ -161,14 +136,14 @@ function TerminalSidebarItem(props: {
                 e.stopPropagation()
                 ctx.onRemoveItem(props.item.id, props.cwd)
               }}
-              class="invisible group-hover/pt:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+              class="invisible group-hover/pt:visible flex items-center gap-0.5 px-1 py-0.5 text-[11px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
               title="Remove terminal"
             >
               <X size={9} />
               Close
             </button>
           </div>
-          <div class="h-[14px] text-[10px] text-muted truncate">Terminal</div>
+          <div class="h-[14px] text-[11px] text-muted truncate">Terminal</div>
         </div>
       </div>
     </div>
@@ -199,8 +174,9 @@ function OpencodeSidebarItem(props: {
   }
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: complex container with nested interactive children
     <div
-      role="menuitem"
+      role="button"
       tabIndex={0}
       class="group/ai relative cursor-pointer text-content text-[13px] hover:bg-hover"
       classList={{
@@ -224,14 +200,14 @@ function OpencodeSidebarItem(props: {
                 e.stopPropagation()
                 ctx.onRemoveItem(props.item.id, props.cwd)
               }}
-              class="invisible group-hover/ai:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+              class="invisible group-hover/ai:visible flex items-center gap-0.5 px-1 py-0.5 text-[11px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
               title="Remove AI chat"
             >
               <X size={9} />
               Close
             </button>
           </div>
-          <div class="h-[14px] text-[10px] truncate">
+          <div class="h-[14px] text-[11px] truncate">
             <span
               classList={{
                 'text-muted': !generating() && !needsAttention(),

@@ -6,21 +6,21 @@ export default function UpdateBanner(): JSX.Element {
 
   return (
     <Show when={updateReady() && !dismissed()}>
-      <div class="flex items-center justify-between px-4 py-2 bg-sidebar border-b border-border text-content text-sm shrink-0">
+      <div class="flex items-center justify-between px-4 py-2 bg-sidebar border-b border-border text-content text-[13px] shrink-0">
         <span>
           Update <strong>v{updateReady()?.version}</strong> is ready to install.
         </span>
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="px-3 py-1 rounded bg-accent text-white text-xs font-medium hover:opacity-90 transition-opacity"
+            class="px-3 py-1 rounded bg-accent text-white text-[11px] font-medium hover:opacity-90 transition-opacity"
             onClick={() => installUpdate()}
           >
             Restart
           </button>
           <button
             type="button"
-            class="px-3 py-1 rounded bg-hover text-content text-xs font-medium hover:bg-active transition-colors"
+            class="px-3 py-1 rounded bg-hover text-content text-[11px] font-medium hover:bg-active transition-colors"
             onClick={() => dismiss()}
           >
             Later

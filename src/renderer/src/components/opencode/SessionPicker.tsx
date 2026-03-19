@@ -1,5 +1,5 @@
 import { For, type JSX, Show } from 'solid-js'
-import type { OcSession } from '../../opencodeStore'
+import type { OcSession } from '../../opcodeProject'
 
 interface SessionPickerProps {
   sessions: OcSession[]
@@ -22,7 +22,7 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 export default function SessionPicker(props: SessionPickerProps): JSX.Element {
-  const sorted = () => [...props.sessions].sort((a, b) => a.updatedAt - b.updatedAt)
+  const sorted = () => [...props.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
 
   return (
     <Show
@@ -44,8 +44,8 @@ export default function SessionPicker(props: SessionPickerProps): JSX.Element {
                 'bg-active': session.id === props.currentSessionId
               }}
             >
-              <span class="flex-1 text-content text-[12px] truncate">{session.title}</span>
-              <span class="text-muted text-[10px] flex-shrink-0">
+              <span class="flex-1 text-content text-[13px] truncate">{session.title}</span>
+              <span class="text-muted text-[11px] flex-shrink-0">
                 {formatRelativeTime(session.updatedAt)}
               </span>
             </button>

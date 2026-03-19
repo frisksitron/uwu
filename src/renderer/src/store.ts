@@ -39,7 +39,6 @@ export const visualTabOrder = createRoot(() =>
         // Return all open items in this workspace, in workspace order
         const ordered: string[] = []
         for (const item of items) {
-          if (item.type === 'script' && item.hidden) continue
           if (isOpen(item.id)) ordered.push(item.id)
         }
         // Also include diff views for this cwd
@@ -54,7 +53,6 @@ export const visualTabOrder = createRoot(() =>
           const items = project.workspaces?.[cwd] ?? []
           const ordered: string[] = []
           for (const item of items) {
-            if (item.type === 'script' && item.hidden) continue
             if (isOpen(item.id)) ordered.push(item.id)
           }
           ordered.push(diffId)

@@ -40,7 +40,7 @@ export default function Dialog(props: DialogProps): JSX.Element {
       <div class="flex flex-col h-full max-h-[80vh]">
         {/* Header */}
         <div class="flex items-center w-full h-8 bg-sidebar border-b border-border shrink-0 select-none">
-          <div class="flex-1 flex items-center px-3 text-heading text-[12px] font-medium">
+          <div class="flex-1 flex items-center px-3 text-heading text-[13px] font-medium">
             {props.title}
           </div>
           <div class="flex items-center">

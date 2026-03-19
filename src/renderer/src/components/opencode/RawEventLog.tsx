@@ -1,5 +1,5 @@
 import { createEffect, For, type JSX } from 'solid-js'
-import type { RawEvent } from '../../opencodeStore'
+import type { RawEvent } from '../../opcodeChat'
 
 interface RawEventLogProps {
   events: RawEvent[]

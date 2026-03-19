@@ -20,7 +20,7 @@ import type {
   OcReasoningPart,
   OcTextPart,
   OcToolPart
-} from '../../opencodeStore'
+} from '../../opcodeChat'
 import MessageContent from './MessageContent'
 import PatchDiffView from './PatchDiffView'
 import PermissionBanner from './PermissionBanner'
@@ -92,7 +92,7 @@ function ToolCard(props: { part: OcToolPart }): JSX.Element {
   }
 
   return (
-    <div class="border border-accent/40 rounded-md bg-app/30 shadow-sm text-[12px]">
+    <div class="border border-accent/40 rounded-md bg-app/30 shadow-sm text-[13px]">
       <button
         type="button"
         onClick={() => setExpanded(!expanded())}
@@ -114,7 +114,7 @@ function ToolCard(props: { part: OcToolPart }): JSX.Element {
               <>
                 <Show when={props.part.state.input}>
                   <div class="pt-2">
-                    <span class="text-muted text-[10px] font-semibold uppercase tracking-wider">
+                    <span class="text-muted text-[11px] font-semibold uppercase tracking-wider">
                       Input
                     </span>
                     <pre class="bg-app border border-border/60 rounded-md p-2 mt-1 overflow-x-auto text-[11px] text-content whitespace-pre-wrap">
@@ -124,7 +124,7 @@ function ToolCard(props: { part: OcToolPart }): JSX.Element {
                 </Show>
                 <Show when={props.part.state.output}>
                   <div class="pt-2">
-                    <span class="text-muted text-[10px] font-semibold uppercase tracking-wider">
+                    <span class="text-muted text-[11px] font-semibold uppercase tracking-wider">
                       Output
                     </span>
                     <pre class="bg-app border border-border/60 rounded-md p-2 mt-1 overflow-x-auto text-[11px] text-content whitespace-pre-wrap max-h-40 overflow-y-auto">
@@ -139,10 +139,10 @@ function ToolCard(props: { part: OcToolPart }): JSX.Element {
           </Show>
           <Show when={props.part.state.error}>
             <div class="pt-2">
-              <span class="text-error text-[10px] font-semibold uppercase tracking-wider">
+              <span class="text-error text-[11px] font-semibold uppercase tracking-wider">
                 Error
               </span>
-              <pre class="bg-error/10 border border-error/30 rounded-md p-2 mt-1 text-[10px] text-error whitespace-pre-wrap">
+              <pre class="bg-error/10 border border-error/30 rounded-md p-2 mt-1 text-[11px] text-error whitespace-pre-wrap">
                 {props.part.state.error}
               </pre>
             </div>
@@ -164,7 +164,7 @@ function ToolCallGroup(props: { parts: OcToolPart[] }): JSX.Element {
     <div class="space-y-2">
       <div class="flex items-center gap-1.5">
         <Terminal size={12} class="text-heading" />
-        <span class="text-heading text-[10px] font-semibold tracking-wider uppercase select-none">
+        <span class="text-heading text-[11px] font-semibold tracking-wider uppercase select-none">
           Tool calls ({props.parts.length})
         </span>
       </div>
@@ -173,7 +173,7 @@ function ToolCallGroup(props: { parts: OcToolPart[] }): JSX.Element {
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          class="text-[10px] text-accent hover:text-accent/80 bg-transparent border border-border hover:border-accent/40 cursor-pointer px-2.5 py-1 rounded-md font-medium transition-colors"
+          class="text-[11px] text-accent hover:text-accent/80 bg-transparent border border-border hover:border-accent/40 cursor-pointer px-2.5 py-1 rounded-md font-medium transition-colors"
         >
           Show {hiddenCount()} more...
         </button>
@@ -197,7 +197,7 @@ function ReasoningBlock(props: {
   }
 
   return (
-    <div class="rounded-md text-[12px]">
+    <div class="rounded-md text-[13px]">
       <button
         type="button"
         onClick={() => setExpanded(!expanded())}
@@ -281,7 +281,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
   return (
     <Switch
       fallback={
-        <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+        <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[13px] shadow-sm">
           <div class="flex items-center gap-1.5">
             <XCircle size={12} class="text-error flex-shrink-0" />
             <span class="text-error font-semibold">{props.error.name}</span>
@@ -295,7 +295,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
       </Match>
 
       <Match when={props.error.name === 'ProviderAuthError'}>
-        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[13px] shadow-sm">
           <div class="flex items-center gap-1.5">
             <KeyRound size={12} class="text-warning flex-shrink-0" />
             <span class="text-warning font-semibold">Authentication failed</span>
@@ -309,7 +309,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
       </Match>
 
       <Match when={props.error.name === 'ContextOverflowError'}>
-        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[13px] shadow-sm">
           <div class="flex items-center gap-1.5">
             <AlertTriangle size={12} class="text-warning flex-shrink-0" />
             <span class="text-warning font-semibold">Context limit reached</span>
@@ -322,7 +322,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
       </Match>
 
       <Match when={props.error.name === 'MessageOutputLengthError'}>
-        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[13px] shadow-sm">
           <div class="flex items-center gap-1.5">
             <AlertTriangle size={12} class="text-warning flex-shrink-0" />
             <span class="text-warning font-semibold">Output truncated</span>
@@ -334,7 +334,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
       </Match>
 
       <Match when={props.error.name === 'StructuredOutputError'}>
-        <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+        <div class="bg-error/10 border border-error/30 rounded-md px-2.5 py-2 text-[13px] shadow-sm">
           <div class="flex items-center gap-1.5">
             <XCircle size={12} class="text-error flex-shrink-0" />
             <span class="text-error font-semibold">Output parsing failed</span>
@@ -350,7 +350,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
       </Match>
 
       <Match when={props.error.name === 'APIError' && props.error.isRetryable}>
-        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[12px] shadow-sm">
+        <div class="bg-warning/10 border border-warning/30 rounded-md px-2.5 py-2 text-[13px] shadow-sm">
           <div class="flex items-center gap-1.5">
             <AlertTriangle size={12} class="text-warning flex-shrink-0" />
             <span class="text-warning font-semibold">
@@ -408,7 +408,7 @@ export default function MessageList(props: MessageListProps): JSX.Element {
                     {msg.role === 'user' ? 'You' : 'Assistant'}
                   </span>
                   <Show when={msg.createdAt}>
-                    <span class="text-[10px] text-muted/60 select-none">
+                    <span class="text-[11px] text-muted/60 select-none">
                       {formatTime(msg.createdAt)}
                     </span>
                   </Show>
@@ -417,7 +417,7 @@ export default function MessageList(props: MessageListProps): JSX.Element {
                       isLastAssistant() && props.generationDuration && props.generationDuration > 0
                     }
                   >
-                    <span class="text-[10px] text-muted/60 select-none">
+                    <span class="text-[11px] text-muted/60 select-none">
                       &middot; {formatDuration(props.generationDuration || 0)}
                     </span>
                   </Show>

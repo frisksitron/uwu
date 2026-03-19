@@ -1,6 +1,9 @@
 import { ArrowUp, ImagePlus, Square, X } from 'lucide-solid'
 import { createEffect, createSignal, For, type JSX, onCleanup, Show } from 'solid-js'
-import type { ImageAttachment, SlashCommand } from '../../opencodeStore'
+import type { ImageAttachment } from '../../opcodeChat'
+import type { SlashCommand } from '../../opcodeProject'
+import { getAgents } from '../../opcodeProject'
+import { matchesBinding, settings } from '../../settingsStore'
 import AgentSelector from './AgentSelector'
 import ModelSelector from './ModelSelector'
 import SlashMenu from './SlashMenu'
@@ -154,6 +157,18 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
       if (handled) return
     }
 
+    // Cycle agent hotkey
+    if (matchesBinding(e, settings.shortcuts.cycleAgent)) {
+      e.preventDefault()
+      const agents = getAgents(props.projectPath)
+      if (agents.length === 0) return
+      const options: Array<string | undefined> = [undefined, ...agents.map((a) => a.name)]
+      const currentIdx = options.indexOf(props.agent)
+      const nextIdx = (currentIdx + 1) % options.length
+      props.onAgentChange(options[nextIdx])
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       submit()
@@ -263,6 +278,35 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
         </div>
       </Show>
 
+      <div class="flex items-center gap-2 mb-1 px-1 min-w-0">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <AgentSelector
+            projectPath={props.projectPath}
+            value={props.agent}
+            onChange={props.onAgentChange}
+          />
+          <ModelSelector
+            projectPath={props.projectPath}
+            value={props.model}
+            onChange={props.onModelChange}
+          />
+          <VariantSelector
+            projectPath={props.projectPath}
+            model={props.model}
+            value={props.variant}
+            onChange={props.onVariantChange}
+          />
+        </div>
+        <div class="hidden sm:flex items-center gap-2 ml-auto min-w-0 overflow-hidden">
+          <Show when={props.isGenerating}>
+            <span class="pulse-dots text-accent text-[11px] flex-shrink-0" />
+            <span class="text-[11px] text-muted whitespace-nowrap">
+              Working for {elapsed()}s...
+            </span>
+          </Show>
+        </div>
+      </div>
+
       <div class="relative">
         <Show when={showSlashMenu() && props.slashCommands.length > 0}>
           <SlashMenu
@@ -294,7 +338,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
           onPaste={handlePaste}
           placeholder="Send a message..."
           rows={1}
-          class="flex-1 resize-none bg-app border border-border rounded-lg px-3 py-2 text-[12px] text-content placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
+          class="flex-1 resize-none bg-app border border-border rounded-lg px-3 py-2 text-[13px] text-content placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
           style={{ 'min-height': '36px', 'max-height': '200px' }}
         />
         <button
@@ -328,35 +372,6 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
             <Square size={14} />
           </button>
         </Show>
-      </div>
-
-      <div class="flex items-center gap-2 mt-1 px-1 min-w-0">
-        <div class="flex items-center gap-1.5 min-w-0">
-          <AgentSelector
-            projectPath={props.projectPath}
-            value={props.agent}
-            onChange={props.onAgentChange}
-          />
-          <ModelSelector
-            projectPath={props.projectPath}
-            value={props.model}
-            onChange={props.onModelChange}
-          />
-          <VariantSelector
-            projectPath={props.projectPath}
-            model={props.model}
-            value={props.variant}
-            onChange={props.onVariantChange}
-          />
-        </div>
-        <div class="hidden sm:flex items-center gap-2 ml-auto min-w-0 overflow-hidden">
-          <Show when={props.isGenerating}>
-            <span class="pulse-dots text-accent text-[10px] flex-shrink-0" />
-            <span class="text-[10px] text-muted whitespace-nowrap">
-              Working for {elapsed()}s...
-            </span>
-          </Show>
-        </div>
       </div>
     </div>
   )

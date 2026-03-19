@@ -9,6 +9,7 @@ import {
 } from '../../../shared/types'
 import { formatBinding, saveSettings, setSettings, settings } from '../settingsStore'
 import Dialog from './Dialog'
+import ToggleSwitch from './ui/ToggleSwitch'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -19,7 +20,8 @@ const shortcutLabels: Record<keyof KeyboardShortcuts, string> = {
   cycleTabBackward: 'Previous tab',
   toggleSidebar: 'Toggle sidebar',
   closeTab: 'Close tab',
-  openSettings: 'Open settings'
+  openSettings: 'Open settings',
+  cycleAgent: 'Cycle agent'
 }
 
 const shellPresets = ['pwsh.exe', 'bash', 'cmd.exe', 'zsh']
@@ -116,7 +118,7 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
         <button
           type="button"
           onClick={save}
-          class="px-4 py-1.5 bg-accent border-none text-white cursor-pointer text-[12px] rounded-sm font-medium hover:opacity-90 transition-opacity"
+          class="px-4 py-1.5 bg-accent border-none text-white cursor-pointer text-[13px] rounded-lg font-medium hover:opacity-90 transition-opacity"
         >
           Done
         </button>
@@ -126,19 +128,19 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
       <div onKeyDown={handleRecordKey}>
         {/* Terminal */}
         <section>
-          <h3 class="text-muted text-[10px] uppercase tracking-widest font-medium m-0 mb-2">
+          <h3 class="text-muted text-[11px] uppercase tracking-widest font-medium m-0 mb-2">
             Terminal
           </h3>
           <div class="flex flex-col gap-3">
             {/* Font Size */}
             <div class="flex items-center gap-2">
-              <span class="text-[12px] text-content w-20 flex-shrink-0">Font size</span>
+              <span class="text-[13px] text-content w-20 flex-shrink-0">Font size</span>
               <button
                 type="button"
                 onClick={() =>
                   setDraft('terminal', 'fontSize', Math.max(8, draft.terminal.fontSize - 1))
                 }
-                class="w-6 h-6 flex items-center justify-center bg-transparent border border-border text-content rounded-sm cursor-pointer hover:border-accent hover:text-accent transition-colors text-[14px]"
+                class="w-6 h-6 flex items-center justify-center bg-transparent border border-border text-content rounded-lg cursor-pointer hover:border-accent hover:text-accent transition-colors text-[14px]"
               >
                 -
               </button>
@@ -151,14 +153,14 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
                   const v = Number.parseInt(e.currentTarget.value, 10)
                   if (v >= 8 && v <= 24) setDraft('terminal', 'fontSize', v)
                 }}
-                class="w-12 bg-terminal border border-input text-content text-[13px] text-center px-1 py-1 rounded-sm outline-none"
+                class="w-12 bg-terminal border border-input text-content text-[13px] text-center px-1 py-1 rounded-lg outline-none"
               />
               <button
                 type="button"
                 onClick={() =>
                   setDraft('terminal', 'fontSize', Math.min(24, draft.terminal.fontSize + 1))
                 }
-                class="w-6 h-6 flex items-center justify-center bg-transparent border border-border text-content rounded-sm cursor-pointer hover:border-accent hover:text-accent transition-colors text-[14px]"
+                class="w-6 h-6 flex items-center justify-center bg-transparent border border-border text-content rounded-lg cursor-pointer hover:border-accent hover:text-accent transition-colors text-[14px]"
               >
                 +
               </button>
@@ -166,27 +168,27 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
 
             {/* Font Family */}
             <div ref={fontDropdownRef} class="relative">
-              <span class="text-[12px] text-content block mb-1">Font family</span>
+              <span class="text-[13px] text-content block mb-1">Font family</span>
               <button
                 type="button"
                 onClick={() => {
                   setFontDropdownOpen((v) => !v)
                   setFontSearch('')
                 }}
-                class="w-full flex items-center justify-between bg-terminal border border-input text-content text-[13px] px-2 py-1.5 rounded-sm cursor-pointer hover:border-accent transition-colors text-left"
+                class="w-full flex items-center justify-between bg-terminal border border-input text-content text-[13px] px-2 py-1.5 rounded-lg cursor-pointer hover:border-accent transition-colors text-left"
               >
                 <span class="truncate">{draft.terminal.fontFamily || 'Select a font...'}</span>
                 <ChevronDown size={14} class="flex-shrink-0 text-muted ml-1" />
               </button>
               <Show when={fontDropdownOpen()}>
-                <div class="absolute z-50 left-0 right-0 mt-1 bg-sidebar border border-border rounded-sm shadow-lg max-h-48 flex flex-col">
+                <div class="absolute z-50 left-0 right-0 mt-1 bg-sidebar border border-border rounded-lg shadow-lg max-h-48 flex flex-col">
                   <input
                     ref={(el) => setTimeout(() => el.focus(), 0)}
                     type="text"
                     value={fontSearch()}
                     onInput={(e) => setFontSearch(e.currentTarget.value)}
                     placeholder="Search fonts..."
-                    class="w-full bg-terminal border-b border-border text-content text-[12px] px-2 py-1.5 outline-none rounded-t-sm"
+                    class="w-full bg-terminal border-b border-border text-content text-[13px] px-2 py-1.5 outline-none rounded-t-sm"
                   />
                   <div class="overflow-y-auto flex-1">
                     <Show
@@ -207,7 +209,7 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
                                 setDraft('terminal', 'fontFamily', font)
                                 setFontDropdownOpen(false)
                               }}
-                              class="w-full text-left px-2 py-1 text-[12px] cursor-pointer border-none transition-colors flex items-center gap-1.5"
+                              class="w-full text-left px-2 py-1 text-[13px] cursor-pointer border-none transition-colors flex items-center gap-1.5"
                               classList={{
                                 'bg-accent text-white': selected(),
                                 'bg-transparent text-content hover:bg-hover': !selected()
@@ -230,25 +232,21 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
             </div>
 
             {/* Cursor Blink */}
-            <label class="flex items-center gap-2 text-[13px] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={draft.terminal.cursorBlink}
-                onChange={(e) => setDraft('terminal', 'cursorBlink', e.currentTarget.checked)}
-                class="accent-accent"
-              />
-              Cursor blink
-            </label>
+            <ToggleSwitch
+              checked={draft.terminal.cursorBlink}
+              onChange={(checked) => setDraft('terminal', 'cursorBlink', checked)}
+              label="Cursor blink"
+            />
 
             {/* Default Shell */}
             <div>
-              <span class="text-[12px] text-content block mb-1">Default shell</span>
+              <span class="text-[13px] text-content block mb-1">Default shell</span>
               <input
                 type="text"
                 value={draft.terminal.defaultShell}
                 onInput={(e) => setDraft('terminal', 'defaultShell', e.currentTarget.value)}
                 placeholder="Platform default"
-                class="w-full bg-terminal border border-input text-content text-[13px] px-2 py-1.5 rounded-sm outline-none"
+                class="w-full bg-terminal border border-input text-content text-[13px] px-2 py-1.5 rounded-lg outline-none"
               />
               <div class="flex gap-1.5 mt-2 flex-wrap">
                 <For each={shellPresets}>
@@ -256,7 +254,7 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
                     <button
                       type="button"
                       onClick={() => setDraft('terminal', 'defaultShell', preset)}
-                      class="px-2 py-0.5 text-[11px] rounded-sm cursor-pointer border transition-colors"
+                      class="px-2 py-0.5 text-[11px] rounded-lg cursor-pointer border transition-colors"
                       classList={{
                         'bg-accent text-white border-accent':
                           draft.terminal.defaultShell === preset,
@@ -275,47 +273,43 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
 
         {/* Window */}
         <section class="mt-4">
-          <h3 class="text-muted text-[10px] uppercase tracking-widest font-medium m-0 mb-2">
+          <h3 class="text-muted text-[11px] uppercase tracking-widest font-medium m-0 mb-2">
             Window
           </h3>
-          <label class="flex items-center gap-2 text-[13px] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={draft.window.rememberBounds}
-              onChange={(e) => setDraft('window', 'rememberBounds', e.currentTarget.checked)}
-              class="accent-accent"
-            />
-            Remember window size and position
-          </label>
+          <ToggleSwitch
+            checked={draft.window.rememberBounds}
+            onChange={(checked) => setDraft('window', 'rememberBounds', checked)}
+            label="Remember window size and position"
+          />
         </section>
 
         {/* Keyboard Shortcuts */}
         <section class="mt-4">
-          <h3 class="text-muted text-[10px] uppercase tracking-widest font-medium m-0 mb-2">
+          <h3 class="text-muted text-[11px] uppercase tracking-widest font-medium m-0 mb-2">
             Keyboard Shortcuts
           </h3>
           <Show when={conflict()}>
-            <p class="text-[11px] text-red-400 m-0 mb-2">{conflict()}</p>
+            <p class="text-[11px] text-error m-0 mb-2">{conflict()}</p>
           </Show>
           <div class="flex flex-col gap-1.5">
             <For each={Object.keys(shortcutLabels) as (keyof KeyboardShortcuts)[]}>
               {(name) => (
                 <div class="flex items-center gap-2 py-1">
-                  <span class="flex-1 text-[12px] text-content">{shortcutLabels[name]}</span>
+                  <span class="flex-1 text-[13px] text-content">{shortcutLabels[name]}</span>
                   <Show
                     when={recording() !== name}
                     fallback={
                       <span class="text-[11px] text-accent italic px-2">Press a key combo...</span>
                     }
                   >
-                    <span class="text-[11px] font-mono bg-terminal border border-border px-2 py-0.5 rounded-sm text-content">
+                    <span class="text-[11px] font-mono bg-terminal border border-border px-2 py-0.5 rounded-lg text-content">
                       {formatBinding(draft.shortcuts[name])}
                     </span>
                   </Show>
                   <button
                     type="button"
                     onClick={() => startRecording(name)}
-                    class="px-2 py-0.5 text-[11px] rounded-sm cursor-pointer border bg-transparent text-muted border-border hover:border-accent hover:text-accent transition-colors"
+                    class="px-2 py-0.5 text-[11px] rounded-lg cursor-pointer border bg-transparent text-muted border-border hover:border-accent hover:text-accent transition-colors"
                   >
                     Record
                   </button>

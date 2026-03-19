@@ -59,7 +59,7 @@ export default function ScriptView(props: ScriptViewProps): JSX.Element {
     >
       {/* Topbar */}
       <div class="flex items-center gap-2 px-3 h-9 border-b border-border bg-sidebar flex-shrink-0">
-        <span class="flex-1 flex items-center gap-1.5 text-[12px] text-content truncate font-medium min-w-0">
+        <span class="flex-1 flex items-center gap-1.5 text-[13px] text-content truncate font-medium min-w-0">
           <Show when={phase() === 'running'}>
             <Loader2 size={11} class="animate-spin flex-shrink-0 text-status-running" />
           </Show>
@@ -73,7 +73,7 @@ export default function ScriptView(props: ScriptViewProps): JSX.Element {
             title="Stop"
           >
             <Square size={14} />
-            <span class="ml-1 text-[12px]">Stop</span>
+            <span class="ml-1 text-[13px]">Stop</span>
           </button>
         </Show>
         <Show when={phase() !== 'running'}>
@@ -84,7 +84,7 @@ export default function ScriptView(props: ScriptViewProps): JSX.Element {
             title={phase() === 'idle' ? 'Run' : 'Rerun'}
           >
             {phase() === 'idle' ? <Play size={14} /> : <RotateCcw size={14} />}
-            <span class="ml-1 text-[12px]">{phase() === 'idle' ? 'Run' : 'Rerun'}</span>
+            <span class="ml-1 text-[13px]">{phase() === 'idle' ? 'Run' : 'Rerun'}</span>
           </button>
         </Show>
       </div>

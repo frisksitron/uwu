@@ -2,7 +2,7 @@ import { FileMinus, FilePen, FilePlus } from 'lucide-solid'
 import type { BundledLanguage, ShikiTransformer } from 'shiki'
 import { createMemo, For, type JSX, Show } from 'solid-js'
 import { getHighlighter } from '../../lib/highlighter'
-import type { OcPatchFileInfo, OcToolPart } from '../../opencodeStore'
+import type { OcPatchFileInfo, OcToolPart } from '../../opcodeChat'
 
 const diffLineTransformer: ShikiTransformer = {
   name: 'diff-line-highlight',

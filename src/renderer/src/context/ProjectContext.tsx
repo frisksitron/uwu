@@ -7,7 +7,7 @@ export interface ProjectContextValue {
   onRunScript: (item: WorkspaceTab, cwd: string) => void
   onCloseItem: (id: string) => void
   onRemoveItem: (id: string, cwd: string) => void
-  onHideScript: (id: string, cwd: string) => void
+
   onCreateTerminal: (worktreePath?: string) => void
   onCreateOpencodeInstance: (worktreePath?: string) => void
   onStartRename: (id: string, label: string) => void

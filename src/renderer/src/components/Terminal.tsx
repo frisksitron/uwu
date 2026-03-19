@@ -45,16 +45,19 @@ export default function Terminal(props: TerminalProps): JSX.Element {
   })
 
   onMount(() => {
+    const cs = getComputedStyle(document.documentElement)
+    const v = (name: string): string => cs.getPropertyValue(name).trim()
+
     term = new XTerm({
       cursorBlink: settings.terminal.cursorBlink,
       fontSize: settings.terminal.fontSize,
       fontFamily: settings.terminal.fontFamily,
       theme: {
-        background: '#fff8fc', // --color-terminal
-        foreground: '#6b3d58', // darker shade of --color-content
-        cursor: '#c9709a', // --color-heading
-        cursorAccent: '#fff8fc',
-        selectionBackground: '#f5c8e5', // --color-border
+        background: v('--color-terminal'),
+        foreground: '#6b3d58',
+        cursor: v('--color-heading'),
+        cursorAccent: v('--color-terminal'),
+        selectionBackground: v('--color-border'),
         // ANSI 16-color palette — warm pink/mauve to match app
         black: '#6b3d58',
         red: '#c84848',
@@ -64,12 +67,12 @@ export default function Terminal(props: TerminalProps): JSX.Element {
         magenta: '#b85890',
         cyan: '#4898a0',
         white: '#e8d0e0',
-        brightBlack: '#a878a0', // --color-muted range
+        brightBlack: v('--color-muted'),
         brightRed: '#e06060',
         brightGreen: '#5ab85a',
         brightYellow: '#c89840',
         brightBlue: '#8888d0',
-        brightMagenta: '#d070a8', // --color-accent range
+        brightMagenta: v('--color-accent'),
         brightCyan: '#60b0b8',
         brightWhite: '#f5e8f0'
       }
@@ -81,6 +84,24 @@ export default function Terminal(props: TerminalProps): JSX.Element {
     // Let app shortcuts pass through to the global keydown handler
     term.attachCustomKeyEventHandler((e) => {
       if (e.type !== 'keydown') return true
+
+      // Ctrl+Shift+C — copy selected text
+      if (e.ctrlKey && e.shiftKey && e.key === 'C' && term.hasSelection()) {
+        navigator.clipboard.writeText(term.getSelection())
+        term.clearSelection()
+        return false
+      }
+
+      // Ctrl+Shift+V — paste from clipboard
+      if (e.ctrlKey && e.shiftKey && e.key === 'V') {
+        if (!props.readOnly) {
+          navigator.clipboard.readText().then((text) => {
+            if (text && id !== undefined) window.terminalAPI.sendInput(id, text)
+          })
+        }
+        return false
+      }
+
       for (const binding of Object.values(settings.shortcuts)) {
         if (matchesBinding(e, binding)) return false
       }

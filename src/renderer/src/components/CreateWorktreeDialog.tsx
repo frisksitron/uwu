@@ -66,7 +66,7 @@ export default function CreateWorktreeDialog(props: CreateWorktreeDialogProps): 
           <button
             type="button"
             onClick={props.onClose}
-            class="px-4 py-1.5 bg-transparent border border-border text-muted cursor-pointer text-[12px] rounded-sm font-medium hover:text-content transition-colors"
+            class="px-4 py-1.5 bg-transparent border border-border text-muted cursor-pointer text-[13px] rounded-sm font-medium hover:text-content transition-colors"
           >
             Cancel
           </button>
@@ -74,7 +74,7 @@ export default function CreateWorktreeDialog(props: CreateWorktreeDialogProps): 
             type="button"
             onClick={submit}
             disabled={creating() || !branchName().trim() || !worktreePath().trim()}
-            class="px-4 py-1.5 bg-accent border-none text-white cursor-pointer text-[12px] rounded-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-4 py-1.5 bg-accent border-none text-white cursor-pointer text-[13px] rounded-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {creating() ? 'Creating...' : 'Create'}
           </button>
@@ -82,7 +82,7 @@ export default function CreateWorktreeDialog(props: CreateWorktreeDialogProps): 
       }
     >
       <section>
-        <h3 class="text-muted text-[10px] uppercase tracking-widest font-medium m-0 mb-2">
+        <h3 class="text-muted text-[11px] uppercase tracking-widest font-medium m-0 mb-2">
           Branch Name
         </h3>
         <input
@@ -96,7 +96,7 @@ export default function CreateWorktreeDialog(props: CreateWorktreeDialogProps): 
       </section>
 
       <section>
-        <h3 class="text-muted text-[10px] uppercase tracking-widest font-medium m-0 mb-2">
+        <h3 class="text-muted text-[11px] uppercase tracking-widest font-medium m-0 mb-2">
           Worktree Path
         </h3>
         <div class="flex gap-1">
@@ -118,12 +118,7 @@ export default function CreateWorktreeDialog(props: CreateWorktreeDialogProps): 
       </section>
 
       <Show when={error()}>
-        <div
-          class="text-[12px] px-2 py-1.5 rounded-sm text-error"
-          style={{ background: 'rgba(240,144,144,0.1)' }}
-        >
-          {error()}
-        </div>
+        <div class="text-[13px] px-2 py-1.5 rounded-sm text-error bg-error/10">{error()}</div>
       </Show>
     </Dialog>
   )

@@ -10,13 +10,13 @@
   --color-input:    #f5a0c8;   /* input border */
   --color-error:    #d95f5f;   /* error / failed status */
   --color-warning:  #c4964e;   /* warning / caution status */
-  --color-success:  #9b7cc9;   /* success status */
+  --color-success:  #7bb88a;   /* success status */
   --color-heading:  #c9709a;   /* project name headings */
-  --color-muted:    #c49ab8;   /* secondary/muted text */
+  --color-muted:    #946580;   /* secondary/muted text */
   --color-content:  #8b4a6e;   /* primary content text */
   --color-terminal: #fff8fc;   /* terminal pane background */
   --color-status-running: #f48cb2;
-  --color-status-success: #d95f5f;
+  --color-status-success: #7bb88a;
   --color-status-error:   #d95f5f;
   --color-status-stop:    #e06060;
   --color-status-action:  #d96a94;
@@ -30,7 +30,7 @@
 }
 
 .markdown {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--color-content);
 }
@@ -198,23 +198,6 @@
   border-radius: 2px;
 }
 
-.diff-filler,
-.diff-gutter-filler {
-  background: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 4px,
-    color-mix(in srgb, var(--color-muted) 8%, transparent) 4px,
-    color-mix(in srgb, var(--color-muted) 8%, transparent) 8px
-  );
-}
-
-.diff-half-grid {
-  display: grid;
-  grid-template-columns: 45px max-content;
-  min-width: 100%;
-}
-
 .diff-file-list {
   min-width: 0;
 }
@@ -292,6 +275,7 @@
   box-shadow: 0 1px 0 0 var(--color-accent);
 }
 
+
 @layer base {
   html, body, #root {
     width: 100%;
@@ -299,7 +283,7 @@
     overflow: hidden;
   }
   body {
-    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    font-family: 'Nunito Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
       Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
   }
@@ -309,18 +293,24 @@
     height: 8px;
   }
   ::-webkit-scrollbar-track {
-    background: #fdeaf5;
+    background: var(--color-sidebar);
     border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb {
-    background: #f5c8e5;
+    background: var(--color-border);
     border-radius: 4px;
-    border: 2px solid #fdeaf5;
+    border: 2px solid var(--color-sidebar);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #f48cb2;
+    background: var(--color-accent);
   }
   ::-webkit-scrollbar-corner {
-    background: #fdeaf5;
+    background: var(--color-sidebar);
+  }
+
+  /* Keyboard focus indicators */
+  *:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
   }
 }

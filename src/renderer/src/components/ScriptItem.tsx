@@ -1,26 +1,25 @@
-import { Circle, CircleDot, EyeOff, Play, RotateCcw, Square } from 'lucide-solid'
+import { Circle, CircleDot, Play, RotateCcw, Square, X } from 'lucide-solid'
 import { type JSX, Match, Show, Switch } from 'solid-js'
 import { getLastLine } from '../outputStore'
 import { runScript, stopScript } from '../scriptActions'
 import { isOpen } from '../tabRuntime'
-import type { CustomScriptTab, ScriptTab } from '../types'
+import type { ScriptTab } from '../types'
 
 interface ScriptItemProps {
-  item: ScriptTab | CustomScriptTab
+  item: ScriptTab
   cwd: string
   indent: number
   isActive: boolean
   status: 'idle' | 'running' | 'success' | 'error'
   onOpen: () => void
   onRun: () => void
-  onHide?: () => void
   onRemove?: () => void
 }
 
 export default function ScriptItem(props: ScriptItemProps): JSX.Element {
   const tabId = () => props.item.id
   const name = () => props.item.name
-  const command = () => (props.item.type === 'custom-script' ? props.item.command : undefined)
+  const command = () => props.item.command
 
   function handleRun(): void {
     if (isOpen(tabId())) {
@@ -35,8 +34,9 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
   }
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: complex container with nested interactive children
     <div
-      role="menuitem"
+      role="button"
       tabIndex={0}
       onClick={() => props.onOpen()}
       onKeyDown={(e) => {
@@ -69,78 +69,67 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
           {/* Line 1: name + action buttons */}
           <div class="flex items-center h-[18px]">
             <span class="truncate flex-1 min-w-0">{name()}</span>
-            <Switch>
-              <Match when={props.status === 'idle'}>
-                <div class="invisible group-hover/script:visible flex items-center gap-0.5">
+            <div class="flex items-center gap-0.5">
+              <div class="invisible group-hover/script:visible flex items-center gap-0.5">
+                <Show when={props.onRemove}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      props.onRemove?.()
+                    }}
+                    class="flex items-center px-1 py-0.5 text-[11px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                    title="Remove script"
+                  >
+                    <X size={9} />
+                  </button>
+                </Show>
+              </div>
+              <Switch>
+                <Match when={props.status === 'idle'}>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleRun()
                     }}
-                    class="flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                    class="invisible group-hover/script:visible flex items-center gap-0.5 px-1 py-0.5 text-[11px] bg-transparent hover:bg-border border-none text-success hover:text-success cursor-pointer rounded transition-colors"
                   >
                     <Play size={9} />
                     Run
                   </button>
-                  <Show when={props.onHide}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        props.onHide?.()
-                      }}
-                      class="flex items-center px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
-                      title="Hide script"
-                    >
-                      <EyeOff size={9} />
-                    </button>
-                  </Show>
-                  <Show when={props.onRemove}>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        props.onRemove?.()
-                      }}
-                      class="flex items-center px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
-                      title="Remove script"
-                    >
-                      <EyeOff size={9} />
-                    </button>
-                  </Show>
-                </div>
-              </Match>
-              <Match when={props.status === 'running'}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleStop()
-                  }}
-                  class="invisible group-hover/script:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
-                >
-                  <Square size={9} />
-                  Stop
-                </button>
-              </Match>
-              <Match when={props.status === 'success' || props.status === 'error'}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleRun()
-                  }}
-                  class="invisible group-hover/script:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
-                >
-                  <RotateCcw size={9} />
-                  Rerun
-                </button>
-              </Match>
-            </Switch>
+                </Match>
+                <Match when={props.status === 'running'}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStop()
+                    }}
+                    class="invisible group-hover/script:visible flex items-center gap-0.5 px-1 py-0.5 text-[11px] bg-transparent hover:bg-border border-none text-error hover:text-error cursor-pointer rounded transition-colors"
+                  >
+                    <Square size={9} />
+                    Stop
+                  </button>
+                </Match>
+                <Match when={props.status === 'success' || props.status === 'error'}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRun()
+                    }}
+                    class="invisible group-hover/script:visible flex items-center gap-0.5 px-1 py-0.5 text-[11px] bg-transparent hover:bg-border border-none text-success hover:text-success cursor-pointer rounded transition-colors"
+                  >
+                    <RotateCcw size={9} />
+                    Rerun
+                  </button>
+                </Match>
+              </Switch>
+            </div>
           </div>
           {/* Line 2: status/command text */}
-          <div class="h-[14px] text-[10px] truncate">
+          <div class="h-[14px] text-[11px] truncate">
             <Switch>
               <Match when={props.status === 'running'}>
                 <span class="text-status-running font-mono">
@@ -153,7 +142,7 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
               <Match when={props.status === 'error'}>
                 <span class="text-error">Failed</span>
               </Match>
-              <Match when={props.status === 'idle' && command()}>
+              <Match when={props.status === 'idle'}>
                 <span class="text-muted">{command()}</span>
               </Match>
             </Switch>

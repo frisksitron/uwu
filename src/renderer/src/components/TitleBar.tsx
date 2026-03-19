@@ -31,7 +31,7 @@ export default function TitleBar(props: TitleBarProps): JSX.Element {
       <div class="flex-1 flex items-center px-1">
         <button
           type="button"
-          class="flex items-center gap-1.5 px-2 py-1 rounded text-heading text-[12px] font-medium hover:bg-active transition-colors cursor-pointer"
+          class="flex items-center gap-1.5 px-2 py-1 rounded text-accent text-[13px] font-semibold hover:bg-active transition-colors cursor-pointer"
           style={{ '-webkit-app-region': 'no-drag' } as JSX.CSSProperties}
           onClick={() => props.onToggleCollapsed()}
           title={props.collapsed ? 'Show sidebar (Ctrl+B)' : 'Hide sidebar (Ctrl+B)'}
@@ -70,7 +70,7 @@ export default function TitleBar(props: TitleBarProps): JSX.Element {
         </button>
         <button
           type="button"
-          class="flex items-center justify-center w-10 h-8 text-heading hover:bg-active transition-colors cursor-pointer"
+          class="flex items-center justify-center w-10 h-8 text-heading hover:bg-error hover:text-white transition-colors cursor-pointer"
           onClick={() => window.windowAPI.close()}
           title="Close"
         >

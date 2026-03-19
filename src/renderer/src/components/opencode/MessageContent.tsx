@@ -73,7 +73,7 @@ function CodeBlock(props: { code: string; lang: string }): JSX.Element {
       <button
         type="button"
         onClick={handleCopy}
-        class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center gap-1 text-[10px] z-10"
+        class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-all flex items-center gap-1 text-[11px] z-10"
         title={copied() ? 'Copied!' : 'Copy code'}
       >
         <Show

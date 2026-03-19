@@ -1,6 +1,5 @@
 export type {
   AppState,
-  CustomScriptTab,
   DiffResult,
   DiffShortStat,
   OpencodeTab,

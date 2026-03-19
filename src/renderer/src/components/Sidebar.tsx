@@ -3,7 +3,8 @@ import { createEffect, For, type JSX, onMount, Show } from 'solid-js'
 import type { SetStoreFunction } from 'solid-js/store'
 import { createStore, produce } from 'solid-js/store'
 import { type ProjectContextValue, ProjectProvider } from '../context/ProjectContext'
-import { getOcActivity, opencodeState, startServer } from '../opencodeStore'
+import { getOcActivity, opcodeChat } from '../opcodeChat'
+import { startServer } from '../opcodeServer'
 import { runScript } from '../scriptActions'
 import { closeTab as closeTabRuntime, isOpen, openTab, removeTab, tabRuntime } from '../tabRuntime'
 import type {
@@ -75,14 +76,10 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         }
       }
 
-      // Ensure worktree has workspace items (reconcile scripts for worktrees)
+      // Ensure worktree has a workspace entry
       const proj = props.store.projects.find((p) => p.id === project.id)
       if (proj && !proj.workspaces[wt.path]) {
-        const items: WorkspaceTab[] = []
-        for (const name of Object.keys(wt.scripts ?? {})) {
-          items.push({ id: crypto.randomUUID(), type: 'script', name })
-        }
-        props.setStore('projects', (p) => p.id === project.id, 'workspaces', wt.path, items)
+        props.setStore('projects', (p) => p.id === project.id, 'workspaces', wt.path, [])
       }
     }
   }
@@ -116,23 +113,13 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   async function addProject(): Promise<void> {
     const folderPath = await window.projectAPI.selectFolder()
     if (!folderPath) return
-    const meta = await window.projectAPI.readMetadata(folderPath)
-
-    const scripts = meta?.scripts || {}
-    const items: WorkspaceTab[] = Object.keys(scripts).map((name) => ({
-      id: crypto.randomUUID(),
-      type: 'script' as const,
-      name
-    }))
 
     const project: Project = {
       id: crypto.randomUUID(),
-      name: meta?.name || folderPath.split(/[\\/]/).pop() || 'Project',
+      name: folderPath.split(/[\\/]/).pop() || 'Project',
       path: folderPath,
-      scripts,
-      projectType: meta?.projectType || 'unknown',
       collapsed: false,
-      workspaces: { [folderPath]: items }
+      workspaces: { [folderPath]: [] }
     }
     props.setStore('projects', (ps) => [...ps, project])
     detectGitAndLoadWorktrees(project)
@@ -205,24 +192,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       'workspaces',
       cwd,
       (items) => (items ?? []).filter((i) => i.id !== id)
-    )
-    if (props.store.activeTabId === id) {
-      props.setStore('activeTabId', findNextOpenTab(id))
-    }
-  }
-
-  function hideScript(project: Project, id: string, cwd: string): void {
-    if (isOpen(id)) {
-      props.onCloseView(id)
-      removeTab(id)
-    }
-    props.setStore(
-      'projects',
-      (p) => p.id === project.id,
-      'workspaces',
-      cwd,
-      (items) =>
-        (items ?? []).map((i) => (i.id === id && i.type === 'script' ? { ...i, hidden: true } : i))
     )
     if (props.store.activeTabId === id) {
       props.setStore('activeTabId', findNextOpenTab(id))
@@ -376,7 +345,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       onRunScript: (item, cwd) => runScriptItem(project, item, cwd),
       onCloseItem: (id) => closeItem(id),
       onRemoveItem: (id, cwd) => removeItem(project, id, cwd),
-      onHideScript: (id, cwd) => hideScript(project, id, cwd),
+
       onCreateTerminal: (wtp) => createTerminal(project, wtp),
       onCreateOpencodeInstance: (wtp) => createOpencodeInstance(project, wtp),
       onStartRename: (id, label) => setState({ renamingTerminalId: id, renameValue: label }),
@@ -392,10 +361,10 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         if (item?.type === 'opencode') return item.sessionId
         return undefined
       },
-      isOcGenerating: (sessionId) => opencodeState.isGenerating[sessionId] ?? false,
+      isOcGenerating: (sessionId) => opcodeChat.isGenerating[sessionId] ?? false,
       ocNeedsAttention: (sessionId) =>
-        (opencodeState.pendingPermissions[sessionId]?.length ?? 0) > 0 ||
-        (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0,
+        (opcodeChat.pendingPermissions[sessionId]?.length ?? 0) > 0 ||
+        (opcodeChat.pendingQuestions[sessionId]?.length ?? 0) > 0,
       ocActivity: (sessionId) => getOcActivity(sessionId),
       onOpenDiff: (wtp) => openDiff(project, wtp),
       isDiffActive: (cwd) => isDiffActive(project, cwd),
@@ -414,11 +383,10 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         {/* Empty state */}
         <Show when={props.store.projects.length === 0}>
           <div class="flex flex-col items-center justify-center h-full gap-3 p-6 text-center select-none">
-            <FolderPlus size={28} class="text-muted opacity-60" />
-            <p class="text-muted text-[12px] leading-relaxed opacity-70">
-              No projects yet.
-              <br />
-              Add one to get started.
+            <FolderPlus size={32} class="text-accent opacity-60" />
+            <p class="text-content text-[13px] font-medium opacity-70">Nothing here yet~</p>
+            <p class="text-muted text-[11px] opacity-60">
+              Add a project below and make yourself at home.
             </p>
           </div>
         </Show>
