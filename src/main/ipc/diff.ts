@@ -81,21 +81,6 @@ function langFromPath(filePath: string): string | undefined {
   return EXT_TO_LANG[extname(filePath).toLowerCase()]
 }
 
-let difftasticCache: { value: boolean; ts: number } | null = null
-const DIFFTASTIC_CACHE_TTL = 5 * 60 * 1000
-
-async function hasDifftastic(): Promise<boolean> {
-  if (difftasticCache !== null && Date.now() - difftasticCache.ts < DIFFTASTIC_CACHE_TTL)
-    return difftasticCache.value
-  try {
-    await execFileAsync('difft', ['--version'])
-    difftasticCache = { value: true, ts: Date.now() }
-  } catch {
-    difftasticCache = { value: false, ts: Date.now() }
-  }
-  return difftasticCache.value
-}
-
 function getNumstat(
   stdout: string
 ): Map<string, { additions: number; deletions: number; binary: boolean }> {
@@ -132,111 +117,6 @@ function getNameStatus(stdout: string): Map<string, { status: DiffFileStatus; ol
     }
   }
   return map
-}
-
-// --- Unified diff parser ---
-
-function parseHunkHeader(line: string): { oldStart: number; newStart: number } | null {
-  const match = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
-  if (!match) return null
-  return {
-    oldStart: Number.parseInt(match[1], 10),
-    newStart: Number.parseInt(match[2], 10)
-  }
-}
-
-function parseUnifiedDiff(raw: string): Map<string, DiffHunk[]> {
-  const result = new Map<string, DiffHunk[]>()
-  const lines = raw.split('\n')
-  let i = 0
-
-  while (i < lines.length) {
-    if (!lines[i].startsWith('diff --git')) {
-      i++
-      continue
-    }
-
-    let filePath = ''
-    i++
-
-    // Skip extended header lines until --- line
-    while (i < lines.length && !lines[i].startsWith('---') && !lines[i].startsWith('diff --git')) {
-      i++
-    }
-
-    if (i >= lines.length || lines[i].startsWith('diff --git')) continue
-
-    // --- a/path or --- /dev/null
-    const minusLine = lines[i]
-    i++
-    if (i >= lines.length) break
-    // +++ b/path or +++ /dev/null
-    const plusLine = lines[i]
-    i++
-
-    if (plusLine.startsWith('+++ b/')) {
-      filePath = plusLine.substring('+++ b/'.length)
-    } else if (plusLine === '+++ /dev/null' && minusLine.startsWith('--- a/')) {
-      filePath = minusLine.substring('--- a/'.length)
-    }
-
-    if (!filePath) continue
-
-    const hunks: DiffHunk[] = []
-
-    while (i < lines.length && !lines[i].startsWith('diff --git')) {
-      const hunkHeader = parseHunkHeader(lines[i])
-      if (!hunkHeader) {
-        i++
-        continue
-      }
-      i++
-
-      let oldLine = hunkHeader.oldStart
-      let newLine = hunkHeader.newStart
-      const rows: DiffRow[] = []
-
-      while (i < lines.length && !lines[i].startsWith('@@') && !lines[i].startsWith('diff --git')) {
-        const line = lines[i]
-        if (line.startsWith('+')) {
-          rows.push({
-            type: 'add',
-            oldLineNo: null,
-            newLineNo: newLine++,
-            oldContent: null,
-            newContent: line.substring(1)
-          })
-        } else if (line.startsWith('-')) {
-          rows.push({
-            type: 'remove',
-            oldLineNo: oldLine++,
-            newLineNo: null,
-            oldContent: line.substring(1),
-            newContent: null
-          })
-        } else if (line.startsWith(' ')) {
-          rows.push({
-            type: 'context',
-            oldLineNo: oldLine++,
-            newLineNo: newLine++,
-            oldContent: line.substring(1),
-            newContent: line.substring(1)
-          })
-        } else if (line.startsWith('\\')) {
-          // "\ No newline at end of file" — skip
-          i++
-          continue
-        }
-        i++
-      }
-
-      if (rows.length > 0) hunks.push({ rows })
-    }
-
-    result.set(filePath, hunks)
-  }
-
-  return result
 }
 
 // --- Difftastic structural diff ---
@@ -333,6 +213,17 @@ function buildRowsFromChunks(
     } else if (oldIsChanged && oldToNew.has(oi)) {
       // Modified line — use mapped new line to avoid desync from interleaved adds/removes
       const mappedNi = oldToNew.get(oi) as number
+      // Emit any added new lines between current ni and the mapped position
+      while (ni < mappedNi) {
+        rows.push({
+          type: 'add',
+          oldLineNo: null,
+          newLineNo: ni + 1,
+          oldContent: null,
+          newContent: newLines[ni]
+        })
+        ni++
+      }
       rows.push({
         type: 'modify',
         oldLineNo: oi + 1,
@@ -416,60 +307,54 @@ async function readFileContent(fullPath: string): Promise<string | null> {
   }
 }
 
-async function tryDifftasticHunks(
+async function getDifftasticHunks(
   cwd: string,
   mode: 'unstaged' | 'staged' | 'all',
   modeArgs: string[]
-): Promise<Map<string, DiffHunk[]> | null> {
-  try {
-    const stdout = await git(['-c', 'diff.external=difft', 'diff', ...modeArgs], cwd, {
-      DFT_DISPLAY: 'json',
-      DFT_UNSTABLE: 'yes'
-    })
+): Promise<Map<string, DiffHunk[]>> {
+  const stdout = await git(['-c', 'diff.external=difft', 'diff', ...modeArgs], cwd, {
+    DFT_DISPLAY: 'json',
+    DFT_UNSTABLE: 'yes'
+  })
 
-    const jsonObjects: DifftasticFile[] = []
-    for (const line of stdout.trim().split('\n')) {
-      if (!line) continue
-      try {
-        jsonObjects.push(JSON.parse(line))
-      } catch {
-        // skip non-JSON lines
-      }
+  const jsonObjects: DifftasticFile[] = []
+  for (const line of stdout.trim().split('\n')) {
+    if (!line) continue
+    try {
+      jsonObjects.push(JSON.parse(line))
+    } catch {
+      // skip non-JSON lines
     }
-
-    if (jsonObjects.length === 0) return null
-
-    const hunksMap = new Map<string, DiffHunk[]>()
-
-    await Promise.all(
-      jsonObjects.map(async (obj) => {
-        try {
-          if (!obj.path || obj.status === 'unchanged') return
-          if (!Array.isArray(obj.chunks) || obj.chunks.length === 0) return
-
-          const oldContent = await getFileContent(cwd, 'HEAD', obj.path)
-          const newContent =
-            mode === 'staged'
-              ? await getFileContent(cwd, ':0', obj.path)
-              : await readFileContent(join(cwd, obj.path))
-
-          const oldLines = oldContent?.split('\n') ?? []
-          const newLines = newContent?.split('\n') ?? []
-          const rows = buildRowsFromChunks(obj.chunks, oldLines, newLines)
-          const hunks = groupIntoHunks(rows)
-          if (hunks.length > 0) {
-            hunksMap.set(obj.path, hunks)
-          }
-        } catch {
-          // skip this file
-        }
-      })
-    )
-
-    return hunksMap.size > 0 ? hunksMap : null
-  } catch {
-    return null
   }
+
+  const hunksMap = new Map<string, DiffHunk[]>()
+
+  await Promise.all(
+    jsonObjects.map(async (obj) => {
+      try {
+        if (!obj.path || obj.status === 'unchanged') return
+        if (!Array.isArray(obj.chunks) || obj.chunks.length === 0) return
+
+        const oldContent = await getFileContent(cwd, 'HEAD', obj.path)
+        const newContent =
+          mode === 'staged'
+            ? await getFileContent(cwd, ':0', obj.path)
+            : await readFileContent(join(cwd, obj.path))
+
+        const oldLines = oldContent?.split('\n') ?? []
+        const newLines = newContent?.split('\n') ?? []
+        const rows = buildRowsFromChunks(obj.chunks, oldLines, newLines)
+        const hunks = groupIntoHunks(rows)
+        if (hunks.length > 0) {
+          hunksMap.set(obj.path, hunks)
+        }
+      } catch {
+        // skip this file
+      }
+    })
+  )
+
+  return hunksMap
 }
 
 function parseShortStat(stdout: string): DiffShortStat | null {
@@ -503,7 +388,6 @@ export function setupDiffIpc(): void {
         files: [],
         totalAdditions: 0,
         totalDeletions: 0,
-        hasDifftastic: false,
         error: 'Invalid working directory'
       }
     }
@@ -512,30 +396,17 @@ export function setupDiffIpc(): void {
     const modeArgs = diffMode === 'staged' ? ['--cached'] : diffMode === 'all' ? ['HEAD'] : []
 
     try {
-      // 1. Always get file list and stats from git (reliable baseline)
-      // --no-ext-diff: bypass any configured external diff tool (e.g. difftastic)
-      // so we always get standard git output formats
-      const [numstatOut, nameStatusOut, diffOut] = await Promise.all([
+      // 1. Get file list, stats, and difftastic hunks in parallel
+      const [numstatOut, nameStatusOut, difftHunks] = await Promise.all([
         git(['diff', '--no-ext-diff', '--numstat', ...modeArgs], cwd).catch(() => ''),
         git(['diff', '--no-ext-diff', '--name-status', '-M', ...modeArgs], cwd).catch(() => ''),
-        git(
-          ['diff', '--no-ext-diff', '--unified=3', '--no-color', '--find-renames', ...modeArgs],
-          cwd
-        ).catch(() => '')
+        getDifftasticHunks(cwd, diffMode, modeArgs)
       ])
 
       const numstat = getNumstat(numstatOut)
       const nameStatus = getNameStatus(nameStatusOut)
-      const parsedHunks = parseUnifiedDiff(diffOut)
 
-      // 2. Optionally try difftastic for structural hunks
-      let difftHunks: Map<string, DiffHunk[]> | null = null
-      const difftAvailable = await hasDifftastic()
-      if (difftAvailable) {
-        difftHunks = await tryDifftasticHunks(cwd, diffMode, modeArgs)
-      }
-
-      // 3. Build file list from name-status (authoritative source for which files changed)
+      // 2. Build file list from name-status (authoritative source for which files changed)
       const files: DiffFile[] = []
       let totalAdditions = 0
       let totalDeletions = 0
@@ -547,9 +418,6 @@ export function setupDiffIpc(): void {
         totalAdditions += additions
         totalDeletions += deletions
 
-        // Use difftastic hunks if available, otherwise fall back to parsed unified diff
-        const hunks = difftHunks?.get(filePath) ?? parsedHunks.get(filePath) ?? []
-
         files.push({
           path: filePath,
           oldPath: info.oldPath,
@@ -558,22 +426,20 @@ export function setupDiffIpc(): void {
           deletions,
           binary: stats?.binary,
           language: langFromPath(filePath),
-          hunks
+          hunks: difftHunks.get(filePath) ?? []
         })
       }
 
       return {
         files,
         totalAdditions,
-        totalDeletions,
-        hasDifftastic: difftAvailable
+        totalDeletions
       }
     } catch (err) {
       return {
         files: [],
         totalAdditions: 0,
         totalDeletions: 0,
-        hasDifftastic: false,
         error: (err as Error).message
       }
     }

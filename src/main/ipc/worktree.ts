@@ -3,7 +3,6 @@ import * as fs from 'node:fs'
 import { join, normalize, relative } from 'node:path'
 import { promisify } from 'node:util'
 import { app, ipcMain } from 'electron'
-import { detectProject } from '../detectors'
 
 const execFileAsync = promisify(execFile)
 
@@ -23,7 +22,6 @@ interface WorktreeInfo {
   path: string
   branch: string
   isMain: boolean
-  scripts: Record<string, string>
 }
 
 /** Copy a list of files from projectPath to worktreePath, creating parent dirs as needed. */
@@ -108,23 +106,10 @@ export function setupWorktreeIpc(): void {
           worktrees.push({
             path: wtPath,
             branch: branch || '(unknown)',
-            isMain: i === 0,
-            scripts: {}
+            isMain: i === 0
           })
         }
       }
-
-      // Detect scripts for each worktree in parallel
-      await Promise.all(
-        worktrees.map(async (wt) => {
-          try {
-            const result = await detectProject(wt.path)
-            wt.scripts = result?.scripts ?? {}
-          } catch {
-            // keep empty scripts
-          }
-        })
-      )
 
       return worktrees
     } catch {

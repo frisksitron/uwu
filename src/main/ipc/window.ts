@@ -25,7 +25,8 @@ export function setupWindowIpc(mainWindow: BrowserWindow): void {
     const store = getSettingsStore()
     const s = store.get('settings')
     if (s.window.rememberBounds && !mainWindow.isDestroyed()) {
-      s.window.bounds = mainWindow.getBounds()
+      s.window.isMaximized = mainWindow.isMaximized()
+      s.window.bounds = mainWindow.getNormalBounds()
       store.set('settings', s)
     }
     if (!mainWindow.isDestroyed()) mainWindow.close()

@@ -11,9 +11,12 @@ import { setupUpdaterIpc } from './ipc/updater'
 import { setupWindowIpc } from './ipc/window'
 import { setupWorktreeIpc } from './ipc/worktree'
 
-function getSavedBounds(): { x: number; y: number; width: number; height: number } | undefined {
+function getSavedWindowState(): {
+  bounds?: { x: number; y: number; width: number; height: number }
+  isMaximized: boolean
+} {
   const s = getSettingsStore().get('settings')
-  if (!s.window.rememberBounds || !s.window.bounds) return undefined
+  if (!s.window.rememberBounds || !s.window.bounds) return { isMaximized: false }
   const b = s.window.bounds
   // Validate bounds are on a visible display
   const displays = screen.getAllDisplays()
@@ -21,11 +24,14 @@ function getSavedBounds(): { x: number; y: number; width: number; height: number
     const { x, y, width, height } = d.workArea
     return b.x + b.width > x && b.x < x + width && b.y + b.height > y && b.y < y + height
   })
-  return visible ? b : undefined
+  return {
+    bounds: visible ? b : undefined,
+    isMaximized: s.window.isMaximized ?? false
+  }
 }
 
 function createWindow(): void {
-  const savedBounds = getSavedBounds()
+  const { bounds: savedBounds, isMaximized } = getSavedWindowState()
   const mainWindow = new BrowserWindow({
     title: 'uwu — Unified Workspace Utility',
     width: savedBounds?.width ?? 900,
@@ -42,7 +48,10 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => {
+    if (isMaximized) mainWindow.maximize()
+    mainWindow.show()
+  })
   mainWindow.on('close', killAllTerminals)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
