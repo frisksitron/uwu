@@ -1,5 +1,15 @@
-import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
-import { produce, unwrap } from 'solid-js/store'
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  on,
+  onCleanup,
+  onMount,
+  Show
+} from 'solid-js'
+import { unwrap } from 'solid-js/store'
 import DiffView from './components/DiffView'
 import OpencodeView from './components/OpencodeView'
 import ScriptView from './components/ScriptView'
@@ -19,7 +29,8 @@ import {
   settingsCorrupted
 } from './settingsStore'
 import { loadProjects, saveProjects, setStore, store, visualTabOrder } from './store'
-import type { OpencodeTab, PersistentTab, Project, Tab, TerminalCacheEntry } from './types'
+import { closeTab as closeTabRuntime, isOpen, setTabStatus, tabRuntime } from './tabRuntime'
+import type { TerminalCacheEntry, WorkspaceTab } from './types'
 
 const IDLE_RESET_DELAY_MS = 5 * 60_000
 const terminalSnapshots = new Map<string, { lastOutput: string; title: string }>()
@@ -109,7 +120,7 @@ export default function App(): JSX.Element {
     }
     if (matchesBinding(e, settings.shortcuts.closeTab)) {
       e.preventDefault()
-      if (store.activeTabId) closeTab(store.activeTabId)
+      if (store.activeTabId) closeView(store.activeTabId)
     }
     if (matchesBinding(e, settings.shortcuts.openSettings)) {
       e.preventDefault()
@@ -136,103 +147,176 @@ export default function App(): JSX.Element {
     document.addEventListener('mouseup', onMouseUp)
   }
 
-  function addTab(tab: Tab, activate = true): void {
-    setStore('tabs', (t) => [...t, tab])
-    if (activate) setStore('activeTabId', tab.tabId)
-  }
-
-  function closeTab(tabId: string): void {
-    const timer = idleTimers.get(tabId)
-    if (timer) {
-      clearTimeout(timer)
-      idleTimers.delete(tabId)
-    }
-    clearOutput(tabId)
-    const remaining = store.tabs.filter((t) => t.tabId !== tabId)
-    setStore('tabs', remaining)
-    if (store.activeTabId === tabId) setStore('activeTabId', remaining.at(-1)?.tabId ?? null)
-  }
-
   const idleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
-  function setTabStatus(
-    tabId: string,
+  function handleStatusChange(
+    id: string,
     status: 'idle' | 'running' | 'exited',
     exitCode?: number
   ): void {
-    const prev = idleTimers.get(tabId)
+    const prev = idleTimers.get(id)
     if (prev) {
       clearTimeout(prev)
-      idleTimers.delete(tabId)
+      idleTimers.delete(id)
     }
-    setStore(
-      produce((s) => {
-        const tab = s.tabs.find((t) => t.tabId === tabId)
-        if (tab && (tab.type === 'script' || tab.type === 'persistent')) {
-          tab.status = status
-          tab.exitCode = exitCode
-        }
-      })
-    )
+    setTabStatus(id, status, exitCode)
     if (status === 'exited') {
       idleTimers.set(
-        tabId,
+        id,
         setTimeout(() => {
-          idleTimers.delete(tabId)
-          setTabStatus(tabId, 'idle')
+          idleTimers.delete(id)
+          setTabStatus(id, 'idle')
         }, IDLE_RESET_DELAY_MS)
       )
     }
   }
 
-  function handleProcessChange(tab: PersistentTab, processName: string): void {
-    const project = store.projects.find((p) => p.id === tab.projectId)
+  function closeView(id: string): void {
+    const timer = idleTimers.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      idleTimers.delete(id)
+    }
+    clearOutput(id)
+    closeTabRuntime(id)
+    if (store.activeTabId === id) {
+      // Find next open tab
+      let nextId: string | null = null
+      for (const project of store.projects) {
+        for (const items of Object.values(project.workspaces ?? {})) {
+          for (const item of items) {
+            if (item.id !== id && isOpen(item.id)) nextId = item.id
+          }
+        }
+      }
+      setStore('activeTabId', nextId)
+    }
+  }
+
+  function handleProcessChange(itemId: string, projectId: string, processName: string): void {
+    const project = store.projects.find((p) => p.id === projectId)
     if (!project) return
-    const pt = project.persistentTerminals.find((t) => t.id === tab.persistentTerminalId)
-    if (!pt || pt.customLabel) return
-    // Skip no-op updates (this fires on every OSC title change)
-    if (processName === pt.label) return
-    setStore('tabs', (t) => t.tabId === tab.tabId, 'label', processName)
-    setStore(
-      'projects',
-      (p) => p.id === tab.projectId,
-      'persistentTerminals',
-      (pts) =>
-        pts.map((p) => (p.id === tab.persistentTerminalId ? { ...p, label: processName } : p))
-    )
+    for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
+      const item = items.find((i) => i.id === itemId)
+      if (item?.type === 'terminal' && !item.customLabel) {
+        if (processName === item.label) return // skip no-op
+        setStore(
+          'projects',
+          (p) => p.id === projectId,
+          'workspaces',
+          cwd,
+          (ws) =>
+            (ws ?? []).map((i) =>
+              i.id === itemId && i.type === 'terminal' ? { ...i, label: processName } : i
+            )
+        )
+        return
+      }
+    }
   }
 
-  function handleSessionChange(tab: OpencodeTab, sessionId: string): void {
-    setStore(
-      produce((s) => {
-        const t = s.tabs.find((t) => t.tabId === tab.tabId)
-        if (t && t.type === 'opencode') t.sessionId = sessionId
-      })
-    )
-    setStore(
-      'projects',
-      (p) => p.id === tab.projectId,
-      'opencodeInstances',
-      (instances) =>
-        (instances ?? []).map((i) => (i.id === tab.opencodeInstanceId ? { ...i, sessionId } : i))
-    )
+  function handleSessionChange(itemId: string, projectId: string, sessionId: string): void {
+    const project = store.projects.find((p) => p.id === projectId)
+    if (!project) return
+    for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
+      const item = items.find((i) => i.id === itemId)
+      if (item?.type === 'opencode') {
+        setStore(
+          'projects',
+          (p) => p.id === projectId,
+          'workspaces',
+          cwd,
+          (ws) =>
+            (ws ?? []).map((i) =>
+              i.id === itemId && i.type === 'opencode' ? { ...i, sessionId } : i
+            )
+        )
+        return
+      }
+    }
   }
 
-  function handleTitleChange(tab: OpencodeTab, title: string): void {
-    setStore('tabs', (t) => t.tabId === tab.tabId, 'label', title)
-    const project = store.projects.find((p) => p.id === tab.projectId)
-    const instance = project?.opencodeInstances?.find((i) => i.id === tab.opencodeInstanceId)
-    if (instance && title !== instance.label) {
-      setStore(
-        'projects',
-        (p) => p.id === tab.projectId,
-        'opencodeInstances',
-        (instances) =>
-          (instances ?? []).map((i) =>
-            i.id === tab.opencodeInstanceId ? { ...i, label: title } : i
-          )
+  function handleTitleChange(itemId: string, projectId: string, title: string): void {
+    const project = store.projects.find((p) => p.id === projectId)
+    if (!project) return
+    for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
+      const item = items.find((i) => i.id === itemId)
+      if (item?.type === 'opencode' && title !== item.label) {
+        setStore(
+          'projects',
+          (p) => p.id === projectId,
+          'workspaces',
+          cwd,
+          (ws) =>
+            (ws ?? []).map((i) =>
+              i.id === itemId && i.type === 'opencode' ? { ...i, label: title } : i
+            )
+        )
+        return
+      }
+    }
+  }
+
+  function getItemCommand(item: WorkspaceTab, projectId: string, cwd: string): string {
+    if (item.type === 'custom-script') return item.command
+    if (item.type === 'script') {
+      const project = store.projects.find((p) => p.id === projectId)
+      if (!project) return ''
+      const wt = project.worktrees?.find((w) => w.path === cwd)
+      const scripts = wt?.scripts ?? project.scripts
+      return scripts[item.name] ?? ''
+    }
+    return ''
+  }
+
+  /**
+   * Renders view for a workspace item. Called once per item by <For>;
+   * item type is stable so branching in the function body is fine.
+   */
+  function renderItemView(item: WorkspaceTab, projectId: string, cwd: string): JSX.Element | null {
+    const proj = () => store.projects.find((p) => p.id === projectId)
+
+    if (item.type === 'opencode') {
+      return (
+        <OpencodeView
+          tabId={item.id}
+          visible={store.activeTabId === item.id}
+          projectPath={cwd}
+          sessionId={item.sessionId}
+          onSessionChange={(sid) => handleSessionChange(item.id, projectId, sid)}
+          onTitleChange={(title) => handleTitleChange(item.id, projectId, title)}
+        />
       )
     }
+    if (item.type === 'script' || item.type === 'custom-script') {
+      return (
+        <ScriptView
+          tabId={item.id}
+          visible={store.activeTabId === item.id}
+          cwd={cwd}
+          command={getItemCommand(item, projectId, cwd)}
+          onStatusChange={(status, exitCode) => handleStatusChange(item.id, status, exitCode)}
+          shell={proj()?.shellOverride || settings.terminal.defaultShell || undefined}
+          extraEnv={proj()?.envVars}
+        />
+      )
+    }
+    if (item.type === 'terminal') {
+      return (
+        <Terminal
+          tabId={item.id}
+          visible={store.activeTabId === item.id}
+          cwd={cwd}
+          onExit={(code) => handleStatusChange(item.id, 'exited', code)}
+          onProcessChange={(name) => handleProcessChange(item.id, projectId, name)}
+          shell={proj()?.shellOverride || settings.terminal.defaultShell || undefined}
+          extraEnv={proj()?.envVars}
+          persistentTerminalId={item.id}
+          onCacheSnapshot={(snap) => terminalSnapshots.set(item.id, snap)}
+        />
+      )
+    }
+    return null
   }
 
   return (
@@ -269,8 +353,7 @@ export default function App(): JSX.Element {
           <Sidebar
             store={store}
             setStore={setStore}
-            onAddTab={addTab}
-            onCloseTab={closeTab}
+            onCloseView={closeView}
             width={sidebarWidth()}
           />
           {/* biome-ignore lint/a11y/useSemanticElements: drag resize handle, not a thematic break */}
@@ -285,58 +368,41 @@ export default function App(): JSX.Element {
             onMouseDown={startResize}
           />
         </div>
+        {/*
+         * Render views directly from store arrays (not a derived memo) so that
+         * Solid's <For> tracks items by store proxy identity. This way reordering
+         * workspace items via produce().sort() moves DOM nodes instead of
+         * recreating components (which would reset terminals/scripts).
+         */}
         <div class="flex-1 relative overflow-hidden">
-          <For each={store.tabs}>
-            {(tab) => {
-              const project = (): Project | undefined =>
-                store.projects.find((p) => p.id === tab.projectId)
-              if (tab.type === 'diff') {
-                return (
-                  <DiffView
-                    tabId={tab.tabId}
-                    visible={store.activeTabId === tab.tabId}
-                    cwd={tab.cwd}
-                    projectId={tab.projectId}
-                  />
-                )
-              }
-              if (tab.type === 'opencode') {
-                return (
-                  <OpencodeView
-                    tabId={tab.tabId}
-                    visible={store.activeTabId === tab.tabId}
-                    projectPath={tab.cwd}
-                    sessionId={tab.sessionId}
-                    onSessionChange={(sessionId) => handleSessionChange(tab, sessionId)}
-                    onTitleChange={(title) => handleTitleChange(tab, title)}
-                  />
-                )
-              }
-              if (tab.type === 'script') {
-                return (
-                  <ScriptView
-                    tabId={tab.tabId}
-                    visible={store.activeTabId === tab.tabId}
-                    cwd={tab.cwd}
-                    command={tab.initialCommand}
-                    onStatusChange={(status, exitCode) => setTabStatus(tab.tabId, status, exitCode)}
-                    shell={project()?.shellOverride || settings.terminal.defaultShell || undefined}
-                    extraEnv={project()?.envVars}
-                  />
-                )
-              }
+          <For each={store.projects}>
+            {(project) => {
+              const cwds = createMemo(() => Object.keys(project.workspaces ?? {}))
               return (
-                <Terminal
-                  tabId={tab.tabId}
-                  visible={store.activeTabId === tab.tabId}
-                  cwd={tab.cwd}
-                  onExit={(code) => setTabStatus(tab.tabId, 'exited', code)}
-                  onProcessChange={(name) => handleProcessChange(tab, name)}
-                  shell={project()?.shellOverride || settings.terminal.defaultShell || undefined}
-                  extraEnv={project()?.envVars}
-                  persistentTerminalId={tab.persistentTerminalId}
-                  onCacheSnapshot={(snap) => terminalSnapshots.set(tab.persistentTerminalId, snap)}
-                />
+                <For each={cwds()}>
+                  {(cwd) => {
+                    const diffId = `diff:${project.id}:${cwd}`
+                    return (
+                      <>
+                        <For each={project.workspaces?.[cwd] ?? []}>
+                          {(item) => (
+                            <Show when={tabRuntime[item.id]?.open}>
+                              {renderItemView(item, project.id, cwd)}
+                            </Show>
+                          )}
+                        </For>
+                        <Show when={tabRuntime[diffId]?.open}>
+                          <DiffView
+                            tabId={diffId}
+                            visible={store.activeTabId === diffId}
+                            cwd={cwd}
+                            projectId={project.id}
+                          />
+                        </Show>
+                      </>
+                    )
+                  }}
+                </For>
               )
             }}
           </For>

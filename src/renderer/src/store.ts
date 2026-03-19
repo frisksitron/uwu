@@ -1,11 +1,11 @@
 import { createMemo, createRoot } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
 import type { ProjectEntry } from '../../shared/types'
+import { isOpen } from './tabRuntime'
 import type { AppState } from './types'
 
 export const [store, setStore] = createStore<AppState>({
   projects: [],
-  tabs: [],
   activeTabId: null
 })
 
@@ -24,54 +24,44 @@ export async function saveProjects(): Promise<void> {
 /**
  * Derives tab order matching sidebar visual layout for the active tab's cwd.
  * Used by Ctrl+Tab to cycle in sidebar order instead of insertion order.
+ * With the unified model, workspace items ARE the order.
  */
 export const visualTabOrder = createRoot(() =>
   createMemo((): string[] => {
-    const activeTab = store.tabs.find((t) => t.tabId === store.activeTabId)
-    if (!activeTab) return store.tabs.map((t) => t.tabId)
+    if (!store.activeTabId) return []
 
-    const project = store.projects.find((p) => p.id === activeTab.projectId)
-    if (!project) return []
+    // Find which project/cwd the active tab belongs to
+    for (const project of store.projects) {
+      for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
+        const found = items.find((item) => item.id === store.activeTabId)
+        if (!found) continue
 
-    const cwd = activeTab.cwd
-    const cwdTabs = store.tabs.filter((t) => t.projectId === project.id && t.cwd === cwd)
-    const ordered: string[] = []
-
-    // Scripts for this cwd: from worktree or project-level
-    const wt = project.worktrees?.find((w) => w.path === cwd)
-    const scripts = wt?.scripts ?? { ...project.scripts, ...(project.customScripts ?? {}) }
-    const customNames = new Set(Object.keys(project.customScripts ?? {}))
-    const hidden = project.hiddenScripts ?? []
-
-    // 1. Detected scripts (non-custom, non-hidden)
-    for (const name of Object.keys(scripts)) {
-      if (customNames.has(name) || hidden.includes(name)) continue
-      const tab = cwdTabs.find((t) => t.type === 'script' && t.initialCommand === scripts[name])
-      if (tab) ordered.push(tab.tabId)
+        // Return all open items in this workspace, in workspace order
+        const ordered: string[] = []
+        for (const item of items) {
+          if (item.type === 'script' && item.hidden) continue
+          if (isOpen(item.id)) ordered.push(item.id)
+        }
+        // Also include diff views for this cwd
+        const diffId = `diff:${project.id}:${cwd}`
+        if (isOpen(diffId)) ordered.push(diffId)
+        return ordered
+      }
+      // Check if active tab is a diff view for this project
+      for (const [cwd] of Object.entries(project.workspaces ?? {})) {
+        const diffId = `diff:${project.id}:${cwd}`
+        if (store.activeTabId === diffId) {
+          const items = project.workspaces?.[cwd] ?? []
+          const ordered: string[] = []
+          for (const item of items) {
+            if (item.type === 'script' && item.hidden) continue
+            if (isOpen(item.id)) ordered.push(item.id)
+          }
+          ordered.push(diffId)
+          return ordered
+        }
+      }
     }
-    // 2. Custom scripts (non-hidden)
-    for (const name of Object.keys(scripts)) {
-      if (!customNames.has(name) || hidden.includes(name)) continue
-      const tab = cwdTabs.find((t) => t.type === 'script' && t.initialCommand === scripts[name])
-      if (tab) ordered.push(tab.tabId)
-    }
-    // 3. Persistent terminals
-    for (const pt of project.persistentTerminals) {
-      if ((pt.worktreePath || project.path) !== cwd) continue
-      const tab = cwdTabs.find((t) => t.type === 'persistent' && t.persistentTerminalId === pt.id)
-      if (tab) ordered.push(tab.tabId)
-    }
-    // 4. Opencode instances
-    for (const oc of project.opencodeInstances ?? []) {
-      if ((oc.worktreePath || project.path) !== cwd) continue
-      const tab = cwdTabs.find((t) => t.type === 'opencode' && t.opencodeInstanceId === oc.id)
-      if (tab) ordered.push(tab.tabId)
-    }
-    // 5. Diff tabs
-    for (const tab of cwdTabs) {
-      if (tab.type === 'diff') ordered.push(tab.tabId)
-    }
-
-    return ordered
+    return []
   })
 )

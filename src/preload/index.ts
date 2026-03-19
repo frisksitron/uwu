@@ -55,7 +55,7 @@ const projectAPI = {
     scripts: Record<string, string>
     projectType: string
   } | null> => ipcRenderer.invoke('project:read-metadata', p),
-  loadProjects: (): Promise<import('../renderer/src/types').Project[]> =>
+  loadProjects: (): Promise<import('../shared/types').Project[]> =>
     ipcRenderer.invoke('projects:load'),
   saveProjects: (projects: import('../shared/types').ProjectEntry[]): Promise<void> =>
     ipcRenderer.invoke('projects:save', projects)
@@ -198,7 +198,9 @@ const opencodeAPI = {
 
 const diffAPI = {
   get: (cwd: string, mode: string): Promise<import('../shared/types').DiffResult> =>
-    ipcRenderer.invoke('diff:get', cwd, mode)
+    ipcRenderer.invoke('diff:get', cwd, mode),
+  shortstat: (cwd: string): Promise<import('../shared/types').DiffShortStat | null> =>
+    ipcRenderer.invoke('diff:shortstat', cwd)
 }
 
 const settingsAPI = {

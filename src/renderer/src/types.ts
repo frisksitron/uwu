@@ -1,14 +1,13 @@
 export type {
   AppState,
+  CustomScriptTab,
   DiffResult,
-  DiffTab,
-  OpencodeInstance,
+  DiffShortStat,
   OpencodeTab,
-  PersistentTab,
-  PersistentTerminal,
   Project,
   ScriptTab,
-  Tab,
   TerminalCacheEntry,
+  TerminalTab,
+  WorkspaceTab,
   WorktreeInfo
 } from '../../shared/types'

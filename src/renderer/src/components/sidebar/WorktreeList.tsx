@@ -1,12 +1,4 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  GitCompareArrows,
-  RefreshCw,
-  Sparkles,
-  SquareTerminal,
-  X
-} from 'lucide-solid'
+import { ChevronDown, ChevronRight, RefreshCw, Sparkles, SquareTerminal, X } from 'lucide-solid'
 import { For, type JSX, Show } from 'solid-js'
 import { useProject } from '../../context/ProjectContext'
 import type { Project, WorktreeInfo } from '../../types'
@@ -26,10 +18,6 @@ export default function WorktreeList(props: WorktreeListProps): JSX.Element {
   return (
     <For each={props.worktrees}>
       {(wt) => {
-        const wtScripts = (): Record<string, string> => ({
-          ...(wt.scripts ?? {}),
-          ...(props.project.customScripts ?? {})
-        })
         const isExpanded = (): boolean => props.project.expandedWorktrees?.[wt.path] ?? false
 
         return (
@@ -84,17 +72,6 @@ export default function WorktreeList(props: WorktreeListProps): JSX.Element {
               >
                 <Sparkles size={10} />
               </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  ctx.onOpenDiff(wt.path)
-                }}
-                class="invisible group-hover/wt:visible bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer p-1 rounded transition-colors flex items-center"
-                title="View diff"
-              >
-                <GitCompareArrows size={10} />
-              </button>
               <Show when={!wt.isMain}>
                 <button
                   type="button"
@@ -123,11 +100,9 @@ export default function WorktreeList(props: WorktreeListProps): JSX.Element {
 
             <Show when={isExpanded()}>
               <ScriptsAndTerminals
-                scripts={wtScripts()}
-                customScriptNames={new Set(Object.keys(props.project.customScripts ?? {}))}
+                items={props.project.workspaces?.[wt.path] ?? []}
                 cwd={wt.path}
                 indent={24}
-                worktreePath={wt.path}
               />
             </Show>
           </div>

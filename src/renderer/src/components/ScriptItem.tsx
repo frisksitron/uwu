@@ -1,33 +1,37 @@
-import { Circle, CircleDot, Play, RotateCcw, Square } from 'lucide-solid'
-import { type JSX, Match, Switch } from 'solid-js'
+import { Circle, CircleDot, EyeOff, Play, RotateCcw, Square } from 'lucide-solid'
+import { type JSX, Match, Show, Switch } from 'solid-js'
 import { getLastLine } from '../outputStore'
 import { runScript, stopScript } from '../scriptActions'
-import type { ScriptTab } from '../types'
+import { isOpen } from '../tabRuntime'
+import type { CustomScriptTab, ScriptTab } from '../types'
 
 interface ScriptItemProps {
-  scriptName: string
-  command?: string
+  item: ScriptTab | CustomScriptTab
   cwd: string
   indent: number
   isActive: boolean
-  isCustom?: boolean
   status: 'idle' | 'running' | 'success' | 'error'
-  tab?: ScriptTab
   onOpen: () => void
   onRun: () => void
+  onHide?: () => void
+  onRemove?: () => void
 }
 
 export default function ScriptItem(props: ScriptItemProps): JSX.Element {
+  const tabId = () => props.item.id
+  const name = () => props.item.name
+  const command = () => (props.item.type === 'custom-script' ? props.item.command : undefined)
+
   function handleRun(): void {
-    if (props.tab) {
-      runScript(props.tab.tabId)
+    if (isOpen(tabId())) {
+      runScript(tabId())
     } else {
       props.onRun()
     }
   }
 
   function handleStop(): void {
-    if (props.tab) stopScript(props.tab.tabId)
+    if (isOpen(tabId())) stopScript(tabId())
   }
 
   return (
@@ -64,20 +68,48 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
         <div class="flex flex-col flex-1 min-w-0">
           {/* Line 1: name + action buttons */}
           <div class="flex items-center h-[18px]">
-            <span class="truncate flex-1 min-w-0">{props.scriptName}</span>
+            <span class="truncate flex-1 min-w-0">{name()}</span>
             <Switch>
               <Match when={props.status === 'idle'}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleRun()
-                  }}
-                  class="invisible group-hover/script:visible flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
-                >
-                  <Play size={9} />
-                  Run
-                </button>
+                <div class="invisible group-hover/script:visible flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRun()
+                    }}
+                    class="flex items-center gap-0.5 px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                  >
+                    <Play size={9} />
+                    Run
+                  </button>
+                  <Show when={props.onHide}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        props.onHide?.()
+                      }}
+                      class="flex items-center px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                      title="Hide script"
+                    >
+                      <EyeOff size={9} />
+                    </button>
+                  </Show>
+                  <Show when={props.onRemove}>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        props.onRemove?.()
+                      }}
+                      class="flex items-center px-1 py-0.5 text-[10px] bg-transparent hover:bg-border border-none text-content/60 hover:text-content cursor-pointer rounded transition-colors"
+                      title="Remove script"
+                    >
+                      <EyeOff size={9} />
+                    </button>
+                  </Show>
+                </div>
               </Match>
               <Match when={props.status === 'running'}>
                 <button
@@ -112,7 +144,7 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
             <Switch>
               <Match when={props.status === 'running'}>
                 <span class="text-status-running font-mono">
-                  {(props.tab && getLastLine(props.tab.tabId)) || 'Running'}
+                  {getLastLine(tabId()) || 'Running'}
                 </span>
               </Match>
               <Match when={props.status === 'success'}>
@@ -121,8 +153,8 @@ export default function ScriptItem(props: ScriptItemProps): JSX.Element {
               <Match when={props.status === 'error'}>
                 <span class="text-error">Failed</span>
               </Match>
-              <Match when={props.status === 'idle' && props.command}>
-                <span class="text-muted">{props.command}</span>
+              <Match when={props.status === 'idle' && command()}>
+                <span class="text-muted">{command()}</span>
               </Match>
             </Switch>
           </div>

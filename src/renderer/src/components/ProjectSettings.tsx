@@ -1,6 +1,6 @@
 import { Plus, Trash2 } from 'lucide-solid'
 import { createSignal, For, Index, type JSX, Show } from 'solid-js'
-import type { Project } from '../types'
+import type { CustomScriptTab, Project, ScriptTab, WorkspaceTab } from '../types'
 import Dialog from './Dialog'
 
 interface ProjectSettingsProps {
@@ -12,22 +12,34 @@ interface ProjectSettingsProps {
 
 export default function ProjectSettings(props: ProjectSettingsProps): JSX.Element {
   const {
-    hiddenScripts: initHidden,
     shellOverride: initShell,
     envVars: initEnv,
     syncFiles: initSync,
     scripts: initScripts,
-    customScripts: initCustomScripts
+    workspaces: initWorkspaces
   } = props.project // eslint-disable-line solid/reactivity -- intentionally capturing initial values
 
-  const [hiddenScripts, setHiddenScripts] = createSignal<string[]>(initHidden ?? [])
+  // Derive hidden scripts from workspace items
+  const allItems = Object.values(initWorkspaces ?? {}).flat()
+  const scriptItems = allItems.filter((i): i is ScriptTab => i.type === 'script')
+  const customScriptItems = allItems.filter((i): i is CustomScriptTab => i.type === 'custom-script')
+  // Deduplicate by name
+  const uniqueHidden = new Set(scriptItems.filter((s) => s.hidden).map((s) => s.name))
+
+  const [hiddenScripts, setHiddenScripts] = createSignal<string[]>([...uniqueHidden])
   const [shellOverride, setShellOverride] = createSignal(initShell ?? '')
   const [envVars, setEnvVars] = createSignal<{ key: string; value: string }[]>(
     Object.entries(initEnv ?? {}).map(([key, value]) => ({ key, value }))
   )
   const [syncFiles, setSyncFiles] = createSignal<string[]>(initSync ?? [])
+
+  // Unique custom scripts from workspace items
+  const uniqueCustom = new Map<string, string>()
+  for (const cs of customScriptItems) {
+    if (!uniqueCustom.has(cs.name)) uniqueCustom.set(cs.name, cs.command)
+  }
   const [customScripts, setCustomScripts] = createSignal<{ name: string; command: string }[]>(
-    Object.entries(initCustomScripts ?? {}).map(([name, command]) => ({ name, command }))
+    [...uniqueCustom.entries()].map(([name, command]) => ({ name, command }))
   )
 
   function toggleScript(name: string): void {
@@ -71,20 +83,51 @@ export default function ProjectSettings(props: ProjectSettingsProps): JSX.Elemen
       const n = name.trim()
       if (n && command.trim()) csObj[n] = command.trim()
     }
+
+    // Apply hidden state and custom scripts back to all workspaces
+    const hidden = new Set(hiddenScripts())
+    const newWorkspaces: Record<string, WorkspaceTab[]> = {}
+
+    for (const [cwd, items] of Object.entries(initWorkspaces ?? {})) {
+      // Update hidden state on script items
+      let updated: WorkspaceTab[] = items.map((item) => {
+        if (item.type === 'script') {
+          return { ...item, hidden: hidden.has(item.name) || undefined }
+        }
+        return item
+      })
+
+      // Remove old custom-script items
+      updated = updated.filter((i) => i.type !== 'custom-script')
+
+      // Add new custom-script items
+      for (const [name, command] of Object.entries(csObj)) {
+        updated.push({
+          id: crypto.randomUUID(),
+          type: 'custom-script',
+          name,
+          command
+        })
+      }
+
+      newWorkspaces[cwd] = updated
+    }
+
     props.onUpdate({
-      hiddenScripts: hiddenScripts().length > 0 ? hiddenScripts() : undefined,
+      workspaces: newWorkspaces,
       shellOverride: shellOverride().trim() || undefined,
       envVars: Object.keys(envObj).length > 0 ? envObj : undefined,
-      syncFiles: syncFiles().length > 0 ? syncFiles() : undefined,
-      customScripts: Object.keys(csObj).length > 0 ? csObj : undefined
+      syncFiles: syncFiles().length > 0 ? syncFiles() : undefined
     })
     props.onClose()
   }
 
   const shellPresets = ['pwsh.exe', 'bash', 'cmd.exe', 'zsh']
+
+  // All script names: detected + custom
   const scriptNames = [
     ...Object.keys(initScripts),
-    ...Object.keys(initCustomScripts ?? {}).filter((k) => !(k in initScripts))
+    ...[...uniqueCustom.keys()].filter((k) => !(k in initScripts))
   ]
 
   return (

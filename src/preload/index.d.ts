@@ -37,14 +37,14 @@ interface ProjectAPI {
     scripts: Record<string, string>
     projectType: string
   } | null>
-  loadProjects: () => Promise<import('../renderer/src/types').Project[]>
+  loadProjects: () => Promise<import('../shared/types').Project[]>
   saveProjects: (projects: import('../shared/types').ProjectEntry[]) => Promise<void>
 }
 
 interface WorktreeAPI {
   getDefaultBasePath: () => Promise<string>
   isGitRepo: (projectPath: string) => Promise<boolean>
-  list: (projectPath: string) => Promise<import('../renderer/src/types').WorktreeInfo[]>
+  list: (projectPath: string) => Promise<import('../shared/types').WorktreeInfo[]>
   create: (
     projectPath: string,
     branchName: string,
@@ -136,6 +136,7 @@ interface UpdaterAPI {
 
 interface DiffAPI {
   get: (cwd: string, mode: string) => Promise<import('../shared/types').DiffResult>
+  shortstat: (cwd: string) => Promise<import('../shared/types').DiffShortStat | null>
 }
 
 interface SettingsAPI {

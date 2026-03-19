@@ -1,20 +1,17 @@
 import { FolderPlus } from 'lucide-solid'
 import { createEffect, For, type JSX, onMount, Show } from 'solid-js'
 import type { SetStoreFunction } from 'solid-js/store'
-import { createStore } from 'solid-js/store'
+import { createStore, produce } from 'solid-js/store'
 import { type ProjectContextValue, ProjectProvider } from '../context/ProjectContext'
 import { getOcActivity, opencodeState, startServer } from '../opencodeStore'
 import { runScript } from '../scriptActions'
+import { closeTab as closeTabRuntime, isOpen, openTab, removeTab, tabRuntime } from '../tabRuntime'
 import type {
   AppState,
-  DiffTab,
-  OpencodeInstance,
   OpencodeTab,
-  PersistentTab,
-  PersistentTerminal,
   Project,
-  ScriptTab,
-  Tab,
+  TerminalTab,
+  WorkspaceTab,
   WorktreeInfo
 } from '../types'
 import CreateWorktreeDialog from './CreateWorktreeDialog'
@@ -27,8 +24,7 @@ import WorktreeList from './sidebar/WorktreeList'
 interface SidebarProps {
   store: AppState
   setStore: SetStoreFunction<AppState>
-  onAddTab: (tab: Tab, activate?: boolean) => void
-  onCloseTab: (tabId: string) => void
+  onCloseView: (id: string) => void
   width: number
 }
 
@@ -46,10 +42,6 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     settingsProjectId: null,
     createWorktreeProjectId: null
   })
-
-  function allScripts(project: Project): Record<string, string> {
-    return { ...project.scripts, ...(project.customScripts ?? {}) }
-  }
 
   async function detectGitAndLoadWorktrees(project: Project): Promise<void> {
     const isGitRepo = await window.worktreeAPI.isGitRepo(project.path)
@@ -81,6 +73,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
             )
           }
         }
+      }
+
+      // Ensure worktree has workspace items (reconcile scripts for worktrees)
+      const proj = props.store.projects.find((p) => p.id === project.id)
+      if (proj && !proj.workspaces[wt.path]) {
+        const items: WorkspaceTab[] = []
+        for (const name of Object.keys(wt.scripts ?? {})) {
+          items.push({ id: crypto.randomUUID(), type: 'script', name })
+        }
+        props.setStore('projects', (p) => p.id === project.id, 'workspaces', wt.path, items)
       }
     }
   }
@@ -115,14 +117,22 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     const folderPath = await window.projectAPI.selectFolder()
     if (!folderPath) return
     const meta = await window.projectAPI.readMetadata(folderPath)
+
+    const scripts = meta?.scripts || {}
+    const items: WorkspaceTab[] = Object.keys(scripts).map((name) => ({
+      id: crypto.randomUUID(),
+      type: 'script' as const,
+      name
+    }))
+
     const project: Project = {
       id: crypto.randomUUID(),
       name: meta?.name || folderPath.split(/[\\/]/).pop() || 'Project',
       path: folderPath,
-      scripts: meta?.scripts || {},
+      scripts,
       projectType: meta?.projectType || 'unknown',
-      persistentTerminals: [],
-      collapsed: false
+      collapsed: false,
+      workspaces: { [folderPath]: items }
     }
     props.setStore('projects', (ps) => [...ps, project])
     detectGitAndLoadWorktrees(project)
@@ -140,158 +150,113 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   function removeProject(projectId: string): void {
     const project = props.store.projects.find((p) => p.id === projectId)
     if (!project) return
-    const projectTabs = props.store.tabs.filter((t) => t.projectId === projectId)
-    for (const tab of projectTabs) props.onCloseTab(tab.tabId)
+    // Close all open views for this project
+    for (const [, items] of Object.entries(project.workspaces ?? {})) {
+      for (const item of items) {
+        if (isOpen(item.id)) {
+          props.onCloseView(item.id)
+          removeTab(item.id)
+        }
+      }
+    }
     props.setStore('projects', (ps) => ps.filter((p) => p.id !== projectId))
   }
 
-  // --- Project-scoped operations for context ---
+  // --- Workspace item operations ---
 
-  function getScriptTab(project: Project, scriptName: string, cwd?: string): ScriptTab | undefined {
-    return props.store.tabs.find(
-      (t): t is ScriptTab =>
-        t.projectId === project.id &&
-        t.type === 'script' &&
-        t.initialCommand === allScripts(project)[scriptName] &&
-        (!cwd || t.cwd === cwd)
-    )
+  function openItem(_project: Project, item: WorkspaceTab, _cwd: string): void {
+    if (isOpen(item.id)) {
+      props.setStore('activeTabId', item.id)
+      return
+    }
+    openTab(item.id)
+    props.setStore('activeTabId', item.id)
   }
 
-  function scriptStatus(
-    project: Project,
-    scriptName: string,
-    cwd?: string
-  ): 'idle' | 'running' | 'success' | 'error' {
-    const tab = getScriptTab(project, scriptName, cwd)
-    if (!tab || !tab.status || tab.status === 'idle') return 'idle'
-    if (tab.status === 'running') return 'running'
-    if (tab.status === 'exited') return tab.exitCode === 0 ? 'success' : 'error'
-    return 'idle'
-  }
-
-  function openScript(
-    project: Project,
-    scriptName: string,
-    cwd: string,
-    activate = true,
-    autoRun = false
-  ): void {
-    const existing = getScriptTab(project, scriptName, cwd)
-    if (existing) {
-      if (activate) props.setStore('activeTabId', existing.tabId)
-      if (autoRun) runScript(existing.tabId)
+  function runScriptItem(_project: Project, item: WorkspaceTab, _cwd: string): void {
+    if (isOpen(item.id)) {
+      runScript(item.id)
     } else {
-      const tabId = crypto.randomUUID()
-      const tab: ScriptTab = {
-        tabId,
-        label: scriptName,
-        cwd,
-        projectId: project.id,
-        type: 'script',
-        initialCommand: allScripts(project)[scriptName],
-        status: 'idle'
-      }
-      props.onAddTab(tab, activate)
-      if (autoRun) {
-        queueMicrotask(() => runScript(tabId))
-      }
+      openTab(item.id)
+      props.setStore('activeTabId', item.id)
+      queueMicrotask(() => runScript(item.id))
     }
   }
 
-  function openPersistentTerminal(project: Project, pt: PersistentTerminal): void {
-    const existing = props.store.tabs.find(
-      (t): t is PersistentTab => t.type === 'persistent' && t.persistentTerminalId === pt.id
-    )
-    if (existing) {
-      props.setStore('activeTabId', existing.tabId)
-    } else {
-      const cwd = pt.worktreePath || project.path
-      const tab: PersistentTab = {
-        tabId: crypto.randomUUID(),
-        label: pt.label,
-        cwd,
-        projectId: project.id,
-        type: 'persistent',
-        persistentTerminalId: pt.id
-      }
-      props.onAddTab(tab)
+  function closeItem(id: string): void {
+    closeTabRuntime(id)
+    if (props.store.activeTabId === id) {
+      // Find next open tab
+      const nextId = findNextOpenTab(id)
+      props.setStore('activeTabId', nextId)
     }
   }
 
-  function removePersistentTerminal(project: Project, ptId: string): void {
-    const tab = props.store.tabs.find(
-      (t) => t.type === 'persistent' && t.persistentTerminalId === ptId
-    )
-    if (tab) props.onCloseTab(tab.tabId)
+  function removeItem(project: Project, id: string, cwd: string): void {
+    // Close the view first
+    if (isOpen(id)) {
+      props.onCloseView(id)
+      removeTab(id)
+    }
+    // Remove from workspace
     props.setStore(
       'projects',
       (p) => p.id === project.id,
-      'persistentTerminals',
-      (pts) => pts.filter((pt) => pt.id !== ptId)
+      'workspaces',
+      cwd,
+      (items) => (items ?? []).filter((i) => i.id !== id)
     )
+    if (props.store.activeTabId === id) {
+      props.setStore('activeTabId', findNextOpenTab(id))
+    }
+  }
+
+  function hideScript(project: Project, id: string, cwd: string): void {
+    if (isOpen(id)) {
+      props.onCloseView(id)
+      removeTab(id)
+    }
+    props.setStore(
+      'projects',
+      (p) => p.id === project.id,
+      'workspaces',
+      cwd,
+      (items) =>
+        (items ?? []).map((i) => (i.id === id && i.type === 'script' ? { ...i, hidden: true } : i))
+    )
+    if (props.store.activeTabId === id) {
+      props.setStore('activeTabId', findNextOpenTab(id))
+    }
+  }
+
+  function findNextOpenTab(excludeId: string): string | null {
+    for (const project of props.store.projects) {
+      for (const [, items] of Object.entries(project.workspaces ?? {})) {
+        for (const item of items) {
+          if (item.id !== excludeId && isOpen(item.id)) return item.id
+        }
+      }
+    }
+    return null
   }
 
   function createTerminal(project: Project, worktreePath?: string): void {
-    const terminalsForWt = project.persistentTerminals.filter(
-      (pt) => (pt.worktreePath || project.path) === (worktreePath || project.path)
-    )
-    const count = terminalsForWt.length
+    const cwd = worktreePath || project.path
+    const items = project.workspaces?.[cwd] ?? []
+    const terminalsInCwd = items.filter((i) => i.type === 'terminal')
+    const count = terminalsInCwd.length
     const label = count === 0 ? 'Terminal' : `Terminal ${count + 1}`
-    const pt: PersistentTerminal = { id: crypto.randomUUID(), label, worktreePath }
+    const tab: TerminalTab = { id: crypto.randomUUID(), type: 'terminal', label }
+
     props.setStore(
       'projects',
       (p) => p.id === project.id,
-      'persistentTerminals',
-      (pts) => [...pts, pt]
+      'workspaces',
+      cwd,
+      (items) => [...(items ?? []), tab]
     )
-    openPersistentTerminal(project, pt)
-  }
-
-  function renameTerminal(project: Project, ptId: string, name: string): void {
-    props.setStore(
-      'projects',
-      (p) => p.id === project.id,
-      'persistentTerminals',
-      (pts) => pts.map((pt) => (pt.id === ptId ? { ...pt, label: name, customLabel: true } : pt))
-    )
-    const tab = props.store.tabs.find(
-      (t) => t.type === 'persistent' && t.persistentTerminalId === ptId
-    )
-    if (tab) props.setStore('tabs', (t) => t.tabId === tab.tabId, 'label', name)
-  }
-
-  function openOpencodeInstance(project: Project, instance: OpencodeInstance): void {
-    const existing = props.store.tabs.find(
-      (t): t is OpencodeTab => t.type === 'opencode' && t.opencodeInstanceId === instance.id
-    )
-    if (existing) {
-      props.setStore('activeTabId', existing.tabId)
-    } else {
-      const cwd = instance.worktreePath || project.path
-      const tab: OpencodeTab = {
-        tabId: crypto.randomUUID(),
-        label: instance.label,
-        cwd,
-        projectId: project.id,
-        type: 'opencode',
-        opencodeInstanceId: instance.id,
-        sessionId: instance.sessionId
-      }
-      props.onAddTab(tab)
-    }
-  }
-
-  function removeOpencodeInstance(project: Project, instanceId: string): void {
-    const tab = props.store.tabs.find(
-      (t) => t.type === 'opencode' && t.opencodeInstanceId === instanceId
-    )
-    if (tab) props.onCloseTab(tab.tabId)
-    props.setStore(
-      'projects',
-      (p) => p.id === project.id,
-      'opencodeInstances',
-      (instances) => (instances ?? []).filter((i) => i.id !== instanceId)
-    )
+    openTab(tab.id)
+    props.setStore('activeTabId', tab.id)
   }
 
   async function createOpencodeInstance(project: Project, worktreePath?: string): Promise<void> {
@@ -299,78 +264,80 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
     const started = await startServer(cwd)
     if (!started) return
 
-    const instancesForCwd = (project.opencodeInstances ?? []).filter(
-      (i) => (i.worktreePath || project.path) === cwd
-    )
-    const count = instancesForCwd.length
+    const items = project.workspaces?.[cwd] ?? []
+    const ocInCwd = items.filter((i) => i.type === 'opencode')
+    const count = ocInCwd.length
     const label = count === 0 ? 'AI Chat' : `AI Chat ${count + 1}`
+    const tab: OpencodeTab = { id: crypto.randomUUID(), type: 'opencode', label }
 
-    const instance: OpencodeInstance = {
-      id: crypto.randomUUID(),
-      label,
-      worktreePath
-    }
     props.setStore(
       'projects',
       (p) => p.id === project.id,
-      'opencodeInstances',
-      (instances) => [...(instances ?? []), instance]
+      'workspaces',
+      cwd,
+      (items) => [...(items ?? []), tab]
     )
-    openOpencodeInstance(project, instance)
+    openTab(tab.id)
+    props.setStore('activeTabId', tab.id)
+  }
+
+  function renameTerminal(project: Project, id: string, cwd: string, name: string): void {
+    props.setStore(
+      'projects',
+      (p) => p.id === project.id,
+      'workspaces',
+      cwd,
+      (items) =>
+        (items ?? []).map((i) =>
+          i.id === id && i.type === 'terminal' ? { ...i, label: name, customLabel: true } : i
+        )
+    )
+  }
+
+  function confirmRename(project: Project, id: string, cwd: string): void {
+    const name = state.renameValue.trim()
+    setState({ renamingTerminalId: null, renameValue: '' })
+    if (name) renameTerminal(project, id, cwd, name)
   }
 
   function openDiff(project: Project, worktreePath?: string): void {
     const cwd = worktreePath || project.path
-    const existing = props.store.tabs.find(
-      (t): t is DiffTab => t.type === 'diff' && t.projectId === project.id && t.cwd === cwd
-    )
-    if (existing) {
-      props.setStore('activeTabId', existing.tabId)
+    const diffId = `diff:${project.id}:${cwd}`
+    if (isOpen(diffId)) {
+      props.setStore('activeTabId', diffId)
     } else {
-      const tab: DiffTab = {
-        tabId: crypto.randomUUID(),
-        label: 'Diff',
-        cwd,
-        projectId: project.id,
-        type: 'diff'
-      }
-      props.onAddTab(tab)
+      openTab(diffId)
+      props.setStore('activeTabId', diffId)
     }
   }
 
-  function confirmRename(project: Project, ptId: string): void {
-    const name = state.renameValue.trim()
-    setState({ renamingTerminalId: null, renameValue: '' })
-    if (name) renameTerminal(project, ptId, name)
+  function isDiffActive(project: Project, cwd: string): boolean {
+    const diffId = `diff:${project.id}:${cwd}`
+    return props.store.activeTabId === diffId
   }
 
-  function isScriptActive(project: Project, scriptName: string, cwd?: string): boolean {
-    return props.store.tabs.some(
-      (t) =>
-        t.projectId === project.id &&
-        t.type === 'script' &&
-        t.initialCommand === allScripts(project)[scriptName] &&
-        (!cwd || t.cwd === cwd) &&
-        t.tabId === props.store.activeTabId
+  function reorderItems(project: Project, cwd: string, newOrder: WorkspaceTab[]): void {
+    // Use produce to sort in-place, preserving store proxy identity so <For> reuses components
+    const idOrder = newOrder.map((i) => i.id)
+    props.setStore(
+      produce((s) => {
+        const proj = s.projects.find((p) => p.id === project.id)
+        if (!proj?.workspaces?.[cwd]) return
+        proj.workspaces[cwd].sort((a, b) => idOrder.indexOf(a.id) - idOrder.indexOf(b.id))
+      })
     )
   }
 
-  function isPtActive(ptId: string): boolean {
-    return props.store.tabs.some(
-      (t) =>
-        t.type === 'persistent' &&
-        t.persistentTerminalId === ptId &&
-        t.tabId === props.store.activeTabId
-    )
+  function isItemActive(id: string): boolean {
+    return props.store.activeTabId === id
   }
 
-  function isOcInstanceActive(instanceId: string): boolean {
-    return props.store.tabs.some(
-      (t) =>
-        t.type === 'opencode' &&
-        t.opencodeInstanceId === instanceId &&
-        t.tabId === props.store.activeTabId
-    )
+  function getItemStatus(id: string): 'idle' | 'running' | 'success' | 'error' {
+    const rt = tabRuntime[id]
+    if (!rt?.status || rt.status === 'idle') return 'idle'
+    if (rt.status === 'running') return 'running'
+    if (rt.status === 'exited') return rt.exitCode === 0 ? 'success' : 'error'
+    return 'idle'
   }
 
   async function removeWorktree(project: Project, wt: WorktreeInfo): Promise<void> {
@@ -380,23 +347,18 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       if (!forceResult.success) return
     }
 
-    const tabsToClose = props.store.tabs.filter(
-      (t) => t.projectId === project.id && t.cwd === wt.path
-    )
-    for (const tab of tabsToClose) props.onCloseTab(tab.tabId)
+    // Close all open views for this worktree
+    const items = project.workspaces?.[wt.path] ?? []
+    for (const item of items) {
+      if (isOpen(item.id)) {
+        props.onCloseView(item.id)
+        removeTab(item.id)
+      }
+    }
 
-    props.setStore(
-      'projects',
-      (p) => p.id === project.id,
-      'persistentTerminals',
-      (pts) => pts.filter((pt) => pt.worktreePath !== wt.path)
-    )
-    props.setStore(
-      'projects',
-      (p) => p.id === project.id,
-      'opencodeInstances',
-      (instances) => (instances ?? []).filter((i) => i.worktreePath !== wt.path)
-    )
+    // Remove workspace
+    // biome-ignore lint/style/noNonNullAssertion: removing key from store requires undefined
+    props.setStore('projects', (p) => p.id === project.id, 'workspaces', wt.path, undefined!)
 
     await refreshWorktrees(project)
   }
@@ -410,26 +372,25 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   function createProjectContext(project: Project): ProjectContextValue {
     return {
       project: () => project,
-      onOpenScript: (scriptName, cwd) => openScript(project, scriptName, cwd),
-      onRunScript: (scriptName, cwd) => openScript(project, scriptName, cwd, false, true),
+      onOpenItem: (item, cwd) => openItem(project, item, cwd),
+      onRunScript: (item, cwd) => runScriptItem(project, item, cwd),
+      onCloseItem: (id) => closeItem(id),
+      onRemoveItem: (id, cwd) => removeItem(project, id, cwd),
+      onHideScript: (id, cwd) => hideScript(project, id, cwd),
       onCreateTerminal: (wtp) => createTerminal(project, wtp),
-      onOpenTerminal: (pt) => openPersistentTerminal(project, pt),
-      onRemoveTerminal: (ptId) => removePersistentTerminal(project, ptId),
-      onStartRename: (ptId, label) => setState({ renamingTerminalId: ptId, renameValue: label }),
-      onConfirmRename: (ptId) => confirmRename(project, ptId),
+      onCreateOpencodeInstance: (wtp) => createOpencodeInstance(project, wtp),
+      onStartRename: (id, label) => setState({ renamingTerminalId: id, renameValue: label }),
+      onConfirmRename: (id, cwd) => confirmRename(project, id, cwd),
       onRenameInput: (value) => setState('renameValue', value),
       onCancelRename: () => setState({ renamingTerminalId: null, renameValue: '' }),
-      isScriptActive: (scriptName, cwd) => isScriptActive(project, scriptName, cwd),
-      scriptStatus: (scriptName, cwd) => scriptStatus(project, scriptName, cwd),
-      getScriptTab: (scriptName, cwd) => getScriptTab(project, scriptName, cwd),
-      isPtActive,
-      onCreateOpencodeInstance: (wtp) => createOpencodeInstance(project, wtp),
-      onOpenOpencodeInstance: (instance) => openOpencodeInstance(project, instance),
-      onRemoveOpencodeInstance: (instanceId) => removeOpencodeInstance(project, instanceId),
-      isOcInstanceActive,
-      getOcSessionId: (instanceId) => {
-        const inst = (project.opencodeInstances ?? []).find((i) => i.id === instanceId)
-        return inst?.sessionId
+      onReorderItems: (cwd, newItems) => reorderItems(project, cwd, newItems),
+      isItemActive,
+      getItemStatus,
+      getOcSessionId: (id) => {
+        const items = Object.values(project.workspaces ?? {}).flat()
+        const item = items.find((i) => i.id === id)
+        if (item?.type === 'opencode') return item.sessionId
+        return undefined
       },
       isOcGenerating: (sessionId) => opencodeState.isGenerating[sessionId] ?? false,
       ocNeedsAttention: (sessionId) =>
@@ -437,6 +398,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         (opencodeState.pendingQuestions[sessionId]?.length ?? 0) > 0,
       ocActivity: (sessionId) => getOcActivity(sessionId),
       onOpenDiff: (wtp) => openDiff(project, wtp),
+      isDiffActive: (cwd) => isDiffActive(project, cwd),
       renamingTerminalId: () => state.renamingTerminalId,
       renameValue: () => state.renameValue
     }
@@ -480,8 +442,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
                       when={project.isGit}
                       fallback={
                         <ScriptsAndTerminals
-                          scripts={allScripts(project)}
-                          customScriptNames={new Set(Object.keys(project.customScripts ?? {}))}
+                          items={project.workspaces?.[project.path] ?? []}
                           cwd={project.path}
                           indent={24}
                         />

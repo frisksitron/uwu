@@ -24,6 +24,7 @@
   --color-icon-terminal:  #7ba4c4;
   --color-icon-ai:        #b07cc9;
   --color-icon-custom:    #7bb88a;
+  --color-icon-diff:      #c96a6a;
   --color-diff-add:       #28a04b;
   --color-diff-remove:    #d73a3a;
 }
@@ -277,6 +278,18 @@
   content: '···';
   letter-spacing: 2px;
   animation: pulse-dot 1.4s infinite ease-in-out;
+}
+
+.dnd-dragging {
+  opacity: 0.3;
+}
+
+.dnd-indicator-before {
+  box-shadow: 0 -1px 0 0 var(--color-accent);
+}
+
+.dnd-indicator-after {
+  box-shadow: 0 1px 0 0 var(--color-accent);
 }
 
 @layer base {

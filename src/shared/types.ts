@@ -2,15 +2,45 @@ export type {
   AppSettings,
   KeyBinding,
   KeyboardShortcuts,
-  OpencodeInstance,
-  PersistentTerminal,
   ProjectEntry,
   TerminalCacheEntry,
   TerminalSettings,
   WindowSettings
 } from './schemas'
 
-import type { AppSettings, OpencodeInstance, PersistentTerminal } from './schemas'
+import type { AppSettings } from './schemas'
+
+// --- Workspace tab types ---
+
+interface WorkspaceTabBase {
+  id: string
+}
+
+export interface ScriptTab extends WorkspaceTabBase {
+  type: 'script'
+  name: string
+  hidden?: boolean
+}
+
+export interface CustomScriptTab extends WorkspaceTabBase {
+  type: 'custom-script'
+  name: string
+  command: string
+}
+
+export interface TerminalTab extends WorkspaceTabBase {
+  type: 'terminal'
+  label: string
+  customLabel?: boolean
+}
+
+export interface OpencodeTab extends WorkspaceTabBase {
+  type: 'opencode'
+  label: string
+  sessionId?: string
+}
+
+export type WorkspaceTab = ScriptTab | CustomScriptTab | TerminalTab | OpencodeTab
 
 // Runtime only — returned from main process, not persisted
 export interface WorktreeInfo {
@@ -26,53 +56,16 @@ export interface Project {
   path: string
   scripts: Record<string, string>
   projectType: string
-  persistentTerminals: PersistentTerminal[]
   collapsed: boolean
-  hiddenScripts?: string[]
-  customScripts?: Record<string, string>
+  workspaces: Record<string, WorkspaceTab[]>
   shellOverride?: string
   envVars?: Record<string, string>
   syncFiles?: string[]
   expandedWorktrees?: Record<string, boolean>
-  opencodeInstances?: OpencodeInstance[]
   // Runtime-only (not persisted)
   isGit?: boolean
   worktrees?: WorktreeInfo[]
 }
-
-// Discriminated union for tabs
-interface TabBase {
-  tabId: string
-  label: string
-  cwd: string
-  projectId: string
-}
-
-export interface ScriptTab extends TabBase {
-  type: 'script'
-  initialCommand: string
-  status?: 'idle' | 'running' | 'exited'
-  exitCode?: number
-}
-
-export interface PersistentTab extends TabBase {
-  type: 'persistent'
-  persistentTerminalId: string
-  status?: 'idle' | 'running' | 'exited'
-  exitCode?: number
-}
-
-export interface OpencodeTab extends TabBase {
-  type: 'opencode'
-  opencodeInstanceId: string
-  sessionId?: string
-}
-
-export interface DiffTab extends TabBase {
-  type: 'diff'
-}
-
-export type Tab = ScriptTab | PersistentTab | OpencodeTab | DiffTab
 
 // Diff data types
 export type DiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed'
@@ -108,9 +101,14 @@ export interface DiffResult {
   error?: string
 }
 
+export interface DiffShortStat {
+  filesChanged: number
+  additions: number
+  deletions: number
+}
+
 export interface AppState {
   projects: Project[]
-  tabs: Tab[]
   activeTabId: string | null
 }
 

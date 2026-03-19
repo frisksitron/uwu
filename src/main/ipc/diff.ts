@@ -3,7 +3,14 @@ import * as fs from 'node:fs/promises'
 import { extname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { ipcMain } from 'electron'
-import type { DiffFile, DiffFileStatus, DiffHunk, DiffResult, DiffRow } from '../../shared/types'
+import type {
+  DiffFile,
+  DiffFileStatus,
+  DiffHunk,
+  DiffResult,
+  DiffRow,
+  DiffShortStat
+} from '../../shared/types'
 
 const execFileAsync = promisify(execFile)
 
@@ -465,7 +472,31 @@ async function tryDifftasticHunks(
   }
 }
 
+function parseShortStat(stdout: string): DiffShortStat | null {
+  const line = stdout.trim()
+  if (!line) return null
+  const files = line.match(/(\d+) files? changed/)
+  const adds = line.match(/(\d+) insertions?\(\+\)/)
+  const dels = line.match(/(\d+) deletions?\(-\)/)
+  if (!files) return null
+  return {
+    filesChanged: Number.parseInt(files[1], 10),
+    additions: adds ? Number.parseInt(adds[1], 10) : 0,
+    deletions: dels ? Number.parseInt(dels[1], 10) : 0
+  }
+}
+
 export function setupDiffIpc(): void {
+  ipcMain.handle('diff:shortstat', async (_event, cwd: string): Promise<DiffShortStat | null> => {
+    if (typeof cwd !== 'string' || !cwd || !isAbsolute(cwd)) return null
+    try {
+      const stdout = await git(['diff', 'HEAD', '--shortstat'], cwd)
+      return parseShortStat(stdout)
+    } catch {
+      return null
+    }
+  })
+
   ipcMain.handle('diff:get', async (_event, cwd: string, mode: string): Promise<DiffResult> => {
     if (typeof cwd !== 'string' || !cwd || !isAbsolute(cwd)) {
       return {

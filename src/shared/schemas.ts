@@ -50,25 +50,43 @@ export const AppSettingsSchema = type({
 
 export type AppSettings = typeof AppSettingsSchema.infer
 
-// --- Project schemas ---
+// --- Workspace tab schemas ---
 
-export const PersistentTerminalSchema = type({
+export const ScriptWorkspaceTabSchema = type({
   id: 'string',
+  type: "'script'",
+  name: 'string',
+  'hidden?': 'boolean'
+})
+
+export const CustomScriptWorkspaceTabSchema = type({
+  id: 'string',
+  type: "'custom-script'",
+  name: 'string',
+  command: 'string'
+})
+
+export const TerminalWorkspaceTabSchema = type({
+  id: 'string',
+  type: "'terminal'",
   label: 'string',
-  'worktreePath?': 'string',
   'customLabel?': 'boolean'
 })
 
-export type PersistentTerminal = typeof PersistentTerminalSchema.infer
-
-export const OpencodeInstanceSchema = type({
+export const OpencodeWorkspaceTabSchema = type({
   id: 'string',
-  'sessionId?': 'string',
+  type: "'opencode'",
   label: 'string',
-  'worktreePath?': 'string'
+  'sessionId?': 'string'
 })
 
-export type OpencodeInstance = typeof OpencodeInstanceSchema.infer
+export const WorkspaceTabSchema = ScriptWorkspaceTabSchema.or(CustomScriptWorkspaceTabSchema)
+  .or(TerminalWorkspaceTabSchema)
+  .or(OpencodeWorkspaceTabSchema)
+
+export type WorkspaceTab = typeof WorkspaceTabSchema.infer
+
+// --- Project schemas ---
 
 export const ProjectEntrySchema = type({
   id: 'string',
@@ -76,15 +94,12 @@ export const ProjectEntrySchema = type({
   path: 'string',
   scripts: 'Record<string, string>',
   projectType: 'string',
-  persistentTerminals: PersistentTerminalSchema.array(),
   collapsed: 'boolean',
-  'hiddenScripts?': 'string[]',
-  'customScripts?': 'Record<string, string>',
+  'workspaces?': 'Record<string, unknown>',
   'shellOverride?': 'string',
   'envVars?': 'Record<string, string>',
   'syncFiles?': 'string[]',
-  'expandedWorktrees?': 'Record<string, boolean>',
-  'opencodeInstances?': OpencodeInstanceSchema.array()
+  'expandedWorktrees?': 'Record<string, boolean>'
 })
 
 export type ProjectEntry = typeof ProjectEntrySchema.infer
