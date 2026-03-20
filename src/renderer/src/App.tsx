@@ -300,7 +300,7 @@ export default function App(): JSX.Element {
           tabId={item.id}
           visible={store.activeTabId === item.id}
           cwd={cwd}
-          onExit={(code) => handleStatusChange(item.id, 'exited', code)}
+          onExit={() => closeView(item.id)}
           onProcessChange={(name) => handleProcessChange(item.id, projectId, name)}
           shell={proj()?.shellOverride || settings.terminal.defaultShell || undefined}
           extraEnv={proj()?.envVars}
