@@ -103,7 +103,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     (props.sessionId ? opcodeChat.pendingPermissions[props.sessionId] : undefined) || []
   const questions = () =>
     (props.sessionId ? opcodeChat.pendingQuestions[props.sessionId] : undefined) || []
-  const streamingContent = () => opcodeChat.streamingContent
+  const streamingContent = () => opcodeChat.smoothContent
   const generationStartTime = () =>
     props.sessionId ? opcodeChat.generationStartTimes[props.sessionId] : undefined
   const generationDuration = () =>

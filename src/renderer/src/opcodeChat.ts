@@ -126,6 +126,7 @@ interface OpcodeChatState {
   pendingPermissions: Record<string, OcPermission[]>
   pendingQuestions: Record<string, OcQuestion[]>
   streamingContent: Record<string, string>
+  smoothContent: Record<string, string>
   streamingVersion: number
   isGenerating: Record<string, boolean>
   generationStartTimes: Record<string, number>
@@ -138,13 +139,32 @@ interface OpcodeChatState {
 
 const MAX_RAW_EVENTS = 500
 
-let streamingRafPending = false
+// --- Smooth streaming: buffer-feedback controller ---
+// Instead of measuring per-chunk incoming rate (which varies wildly with chunk
+// sizes), we use a feedback loop on the buffer level. The drain rate adjusts
+// based on how full the buffer is: large buffer → speed up, small → slow down.
+// This is chunk-size-agnostic — only the aggregate buffer level matters.
+
+const DRAIN_INIT = 4 // initial rate (chars/frame)
+const DRAIN_TARGET_BUFFER = 30 // ideal buffer size (chars) to maintain
+const DRAIN_FEEDBACK = 0.005 // proportional gain: rate adjustment per char of error
+const DRAIN_MAX_UP = 0.8 // max rate increase per frame (fast catch-up)
+const DRAIN_MAX_DOWN = 0.5 // max rate decrease per frame (smooth tail)
+
+interface PartDrainState {
+  drainRate: number // current output rate (chars/frame)
+  cursor: number // fractional position for sub-char-smooth advancement
+}
+
+let smoothingLoopRunning = false
+const partDrainStates: Record<string, PartDrainState> = {}
 
 const [state, setState] = createStore<OpcodeChatState>({
   messages: {},
   pendingPermissions: {},
   pendingQuestions: {},
   streamingContent: {},
+  smoothContent: {},
   streamingVersion: 0,
   isGenerating: {},
   generationStartTimes: {},
@@ -154,6 +174,56 @@ const [state, setState] = createStore<OpcodeChatState>({
   sessionVariants: {},
   rawEvents: []
 })
+
+function smoothingTick(): void {
+  let anyAdvanced = false
+  setState(
+    produce((s: OpcodeChatState) => {
+      for (const partId of Object.keys(s.streamingContent)) {
+        const target = s.streamingContent[partId]
+        const current = s.smoothContent[partId] ?? ''
+
+        let ps = partDrainStates[partId]
+        if (!ps) {
+          ps = { drainRate: DRAIN_INIT, cursor: current.length }
+          partDrainStates[partId] = ps
+        }
+
+        // Sync cursor if externally modified (e.g. session.idle)
+        if (ps.cursor < current.length) ps.cursor = current.length
+
+        // Buffer-feedback: adjust drain rate based on buffer level
+        const buffer = target.length - ps.cursor
+        const error = buffer - DRAIN_TARGET_BUFFER
+        const adj = Math.max(-DRAIN_MAX_DOWN, Math.min(DRAIN_MAX_UP, DRAIN_FEEDBACK * error))
+        ps.drainRate = Math.max(1, ps.drainRate + adj)
+
+        // Advance fractional cursor
+        if (buffer > 0) {
+          ps.cursor = Math.min(target.length, ps.cursor + ps.drainRate)
+          const newLen = Math.floor(ps.cursor)
+          if (newLen > current.length) {
+            s.smoothContent[partId] = target.slice(0, newLen)
+            anyAdvanced = true
+          }
+        }
+      }
+      if (anyAdvanced) s.streamingVersion++
+    })
+  )
+  if (Object.keys(state.streamingContent).length > 0) {
+    requestAnimationFrame(smoothingTick)
+  } else {
+    smoothingLoopRunning = false
+  }
+}
+
+function ensureSmoothingLoop(): void {
+  if (!smoothingLoopRunning) {
+    smoothingLoopRunning = true
+    requestAnimationFrame(smoothingTick)
+  }
+}
 
 export { state as opcodeChat }
 
@@ -567,13 +637,10 @@ export function initEventListener(): () => void {
         }
         if (props.field === 'text') {
           setState('streamingContent', props.partID, (prev) => (prev || '') + props.delta)
-          if (!streamingRafPending) {
-            streamingRafPending = true
-            requestAnimationFrame(() => {
-              streamingRafPending = false
-              setState('streamingVersion', (v) => v + 1)
-            })
+          if (!(props.partID in state.smoothContent)) {
+            setState('smoothContent', props.partID, '')
           }
+          ensureSmoothingLoop()
         }
         break
       }
@@ -661,6 +728,8 @@ export function initEventListener(): () => void {
                 ) {
                   part.text = s.streamingContent[part.id]
                   delete s.streamingContent[part.id]
+                  delete s.smoothContent[part.id]
+                  delete partDrainStates[part.id]
                 }
               }
             }
