@@ -12,9 +12,18 @@ import {
   sendMessage
 } from '../opcodeChat'
 import {
+  initProject,
+  promote,
+  resolvedAgent,
+  resolvedModel,
+  resolvedVariant,
+  setSelection
+} from '../opcodeLocal'
+import {
   createSession,
   getSlashCommands,
   loadAgents,
+  loadConfig,
   loadModels,
   loadSessions,
   loadSlashCommands,
@@ -36,20 +45,10 @@ interface OpencodeViewProps {
 }
 
 export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
-  // Local overrides — when set, take priority over server values for the next message
-  const [modelOverride, setModelOverride] = createSignal<
-    { providerID: string; modelID: string } | undefined
-  >()
-  const [agentOverride, setAgentOverride] = createSignal<string | undefined>()
-  const [variantOverride, setVariantOverride] = createSignal<string | undefined>()
-
-  // Resolved values: local override > server's last-used value (from user messages)
-  const model = () =>
-    modelOverride() ?? (props.sessionId ? opcodeChat.sessionModels[props.sessionId] : undefined)
-  const agent = () =>
-    agentOverride() ?? (props.sessionId ? opcodeChat.sessionAgents[props.sessionId] : undefined)
-  const variant = () =>
-    variantOverride() ?? (props.sessionId ? opcodeChat.sessionVariants[props.sessionId] : undefined)
+  // Resolved values from opcodeLocal (per-session state + fallback chain)
+  const model = () => resolvedModel(props.projectPath, props.sessionId)
+  const agent = () => resolvedAgent(props.projectPath, props.sessionId)
+  const variant = () => resolvedVariant(props.projectPath, props.sessionId)
 
   const [showRaw, setShowRaw] = createSignal(false)
   const [showHistory, setShowHistory] = createSignal(false)
@@ -70,8 +69,10 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
       loadAgents(props.projectPath),
       loadModels(props.projectPath),
       loadSessions(props.projectPath),
-      loadSlashCommands(props.projectPath)
+      loadSlashCommands(props.projectPath),
+      loadConfig(props.projectPath)
     ])
+    initProject(props.projectPath)
     if (props.sessionId) {
       await loadMessages(props.projectPath, props.sessionId)
       requestAnimationFrame(() => scrollToBottom())
@@ -165,6 +166,8 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
       const newSession = await createSession(props.projectPath)
       if (!newSession) return
       sessionId = newSession.id
+      // Promote draft selections to the new session
+      promote(props.projectPath, sessionId)
       props.onSessionChange(sessionId)
     }
 
@@ -215,29 +218,37 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   }
 
   async function handleNewSession(): Promise<void> {
-    setModelOverride(undefined)
-    setAgentOverride(undefined)
-    setVariantOverride(undefined)
     const newSession = await createSession(props.projectPath)
     if (newSession) {
+      // Promote current resolved values into the new session
+      promote(props.projectPath, newSession.id)
       props.onSessionChange(newSession.id)
     }
   }
 
   async function handleSelectSession(sessionId: string): Promise<void> {
     setShowHistory(false)
-    setModelOverride(undefined)
-    setAgentOverride(undefined)
-    setVariantOverride(undefined)
     props.onSessionChange(sessionId)
     await loadMessages(props.projectPath, sessionId)
     setLockedToBottom(true)
     requestAnimationFrame(() => scrollToBottom())
   }
 
+  function handleModelChange(m: { providerID: string; modelID: string } | undefined): void {
+    setSelection(props.projectPath, props.sessionId, { model: m })
+  }
+
+  function handleAgentChange(a: string | undefined): void {
+    setSelection(props.projectPath, props.sessionId, { agent: a })
+  }
+
+  function handleVariantChange(v: string | undefined): void {
+    setSelection(props.projectPath, props.sessionId, { variant: v ?? null })
+  }
+
   return (
     <div
-      class="w-full h-full absolute top-0 left-0 flex flex-col"
+      class="w-full h-full absolute top-0 left-0 flex flex-col bg-white"
       classList={{
         invisible: !props.visible,
         'pointer-events-none': !props.visible
@@ -245,7 +256,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     >
       {/* Loading state — shown until server connects and data loads */}
       <Show when={!loaded() && !serverError()}>
-        <div class="flex-1 flex items-center justify-center bg-app">
+        <div class="flex-1 flex items-center justify-center bg-white">
           <div class="flex flex-col items-center gap-3 select-none">
             <Loader2 size={24} class="text-accent animate-spin" />
             <p class="text-muted text-[13px] m-0">Connecting to AI server...</p>
@@ -255,7 +266,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
       {/* Server error state */}
       <Show when={serverError()}>
-        <div class="flex-1 flex items-center justify-center bg-app">
+        <div class="flex-1 flex items-center justify-center bg-white">
           <p class="text-error text-[13px] select-none">
             Failed to start AI server. Check your configuration and try again.
           </p>
@@ -327,15 +338,15 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
         <div class="flex-1 flex min-h-0">
           <div
             ref={scrollRef}
-            class="overflow-y-auto bg-app relative"
+            class="overflow-y-auto bg-white relative"
             classList={{ 'w-1/2': showRaw(), 'w-full': !showRaw() }}
             onScroll={handleScroll}
           >
-            <div ref={contentRef}>
+            <div ref={contentRef} class="min-h-full flex flex-col">
               <Show
                 when={messages().length > 0}
                 fallback={
-                  <div class="flex items-center justify-center h-full">
+                  <div class="flex items-center justify-center flex-1">
                     <div class="w-72 max-h-full overflow-y-auto">
                       <Show
                         when={sessions().filter((s) => s.id !== (props.sessionId ?? '')).length > 0}
@@ -352,7 +363,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
                           </div>
                         }
                       >
-                        <p class="text-muted text-[11px] font-medium mb-1 px-3 select-none">
+                        <p class="text-muted text-[11px] font-medium mb-1 mt-4 px-3 select-none">
                           Previous sessions
                         </p>
                         <SessionPicker
@@ -414,11 +425,11 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
           visible={props.visible}
           projectPath={props.projectPath}
           model={model()}
-          onModelChange={setModelOverride}
+          onModelChange={handleModelChange}
           agent={agent()}
-          onAgentChange={setAgentOverride}
+          onAgentChange={handleAgentChange}
           variant={variant()}
-          onVariantChange={setVariantOverride}
+          onVariantChange={handleVariantChange}
         />
       </Show>
     </div>

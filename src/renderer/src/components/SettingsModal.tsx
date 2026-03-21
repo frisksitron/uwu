@@ -1,5 +1,5 @@
-import { ChevronDown, RotateCcw } from 'lucide-solid'
-import { createEffect, createSignal, For, type JSX, on, onCleanup, onMount, Show } from 'solid-js'
+import { RotateCcw } from 'lucide-solid'
+import { createSignal, For, type JSX, onMount, Show } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
 import {
   type AppSettings,
@@ -9,6 +9,7 @@ import {
 } from '../../../shared/types'
 import { formatBinding, saveSettings, setSettings, settings } from '../settingsStore'
 import Dialog from './Dialog'
+import Select from './ui/Select'
 import ToggleSwitch from './ui/ToggleSwitch'
 
 interface SettingsModalProps {
@@ -32,32 +33,10 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
   const [recording, setRecording] = createSignal<keyof KeyboardShortcuts | null>(null)
   const [conflict, setConflict] = createSignal<string | null>(null)
   const [monoFonts, setMonoFonts] = createSignal<string[]>([])
-  const [fontSearch, setFontSearch] = createSignal('')
-  const [fontDropdownOpen, setFontDropdownOpen] = createSignal(false)
-  let fontDropdownRef!: HTMLDivElement
 
   onMount(async () => {
     setMonoFonts(await window.settingsAPI.getMonoFonts())
   })
-
-  createEffect(
-    on(fontDropdownOpen, (open) => {
-      if (!open) return
-      const onPointerDown = (e: PointerEvent): void => {
-        if (fontDropdownRef && !fontDropdownRef.contains(e.target as Node)) {
-          setFontDropdownOpen(false)
-        }
-      }
-      document.addEventListener('pointerdown', onPointerDown)
-      onCleanup(() => document.removeEventListener('pointerdown', onPointerDown))
-    })
-  )
-
-  const filteredFonts = (): string[] => {
-    const q = fontSearch().toLowerCase()
-    if (!q) return monoFonts()
-    return monoFonts().filter((f) => f.toLowerCase().includes(q))
-  }
 
   function startRecording(name: keyof KeyboardShortcuts): void {
     setConflict(null)
@@ -167,68 +146,20 @@ export default function SettingsModal(props: SettingsModalProps): JSX.Element {
             </div>
 
             {/* Font Family */}
-            <div ref={fontDropdownRef} class="relative">
+            <div>
               <span class="text-[13px] text-content block mb-1">Font family</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setFontDropdownOpen((v) => !v)
-                  setFontSearch('')
-                }}
-                class="w-full flex items-center justify-between bg-terminal border border-input text-content text-[13px] px-2 py-1.5 rounded-lg cursor-pointer hover:border-accent transition-colors text-left"
-              >
-                <span class="truncate">{draft.terminal.fontFamily || 'Select a font...'}</span>
-                <ChevronDown size={14} class="flex-shrink-0 text-muted ml-1" />
-              </button>
-              <Show when={fontDropdownOpen()}>
-                <div class="absolute z-50 left-0 right-0 mt-1 bg-sidebar border border-border rounded-lg shadow-lg max-h-48 flex flex-col">
-                  <input
-                    ref={(el) => setTimeout(() => el.focus(), 0)}
-                    type="text"
-                    value={fontSearch()}
-                    onInput={(e) => setFontSearch(e.currentTarget.value)}
-                    placeholder="Search fonts..."
-                    class="w-full bg-terminal border-b border-border text-content text-[13px] px-2 py-1.5 outline-none rounded-t-sm"
-                  />
-                  <div class="overflow-y-auto flex-1">
-                    <Show
-                      when={filteredFonts().length > 0}
-                      fallback={
-                        <div class="px-2 py-2 text-[11px] text-muted italic">
-                          {monoFonts().length === 0 ? 'Loading fonts...' : 'No matching fonts'}
-                        </div>
-                      }
-                    >
-                      <For each={filteredFonts()}>
-                        {(font) => {
-                          const selected = (): boolean => draft.terminal.fontFamily === font
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDraft('terminal', 'fontFamily', font)
-                                setFontDropdownOpen(false)
-                              }}
-                              class="w-full text-left px-2 py-1 text-[13px] cursor-pointer border-none transition-colors flex items-center gap-1.5"
-                              classList={{
-                                'bg-accent text-white': selected(),
-                                'bg-transparent text-content hover:bg-hover': !selected()
-                              }}
-                            >
-                              <span
-                                class="truncate flex-1"
-                                style={{ 'font-family': `"${font}", monospace` }}
-                              >
-                                {font}
-                              </span>
-                            </button>
-                          )
-                        }}
-                      </For>
-                    </Show>
-                  </div>
-                </div>
-              </Show>
+              <Select<string>
+                options={monoFonts()}
+                value={draft.terminal.fontFamily || undefined}
+                onChange={(font) => setDraft('terminal', 'fontFamily', font ?? '')}
+                placeholder="Select a font..."
+                itemRender={(font) => (
+                  <span class="truncate" style={{ 'font-family': `"${font}", monospace` }}>
+                    {font}
+                  </span>
+                )}
+                label="Font family"
+              />
             </div>
 
             {/* Cursor Blink */}

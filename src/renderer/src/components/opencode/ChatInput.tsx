@@ -247,15 +247,15 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drop zone for image attachments
     <div
-      class="border-t border-border bg-sidebar p-2 flex-shrink-0 transition-colors"
-      classList={{ 'border-accent/50 bg-accent/5': dragOver() }}
+      class="mx-3 mb-3 rounded-xl border border-border bg-app shadow-sm flex-shrink-0 transition-colors"
+      classList={{ 'border-accent/50 bg-accent/5 shadow-md': dragOver() }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Image preview strip */}
       <Show when={images().length > 0}>
-        <div class="flex items-center gap-1.5 mb-1.5 px-1 overflow-x-auto">
+        <div class="flex items-center gap-1.5 px-3 pt-3 overflow-x-auto">
           <For each={images()}>
             {(img) => (
               <div class="relative flex-shrink-0 group">
@@ -267,7 +267,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
                 <button
                   type="button"
                   onClick={() => removeImage(img.id)}
-                  class="absolute -top-1.5 -right-1.5 bg-sidebar border border-border rounded-full p-0.5 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-error"
+                  class="absolute -top-1.5 -right-1.5 bg-app border border-border rounded-full p-0.5 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity text-muted hover:text-error"
                   title="Remove image"
                 >
                   <X size={10} />
@@ -278,8 +278,53 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
         </div>
       </Show>
 
-      <div class="flex items-center gap-2 mb-1 px-1 min-w-0">
-        <div class="flex items-center gap-1.5 min-w-0">
+      {/* Slash menu — floats above the card */}
+      <div class="relative">
+        <Show when={showSlashMenu() && props.slashCommands.length > 0}>
+          <SlashMenu
+            ref={(el) => {
+              slashMenuRef = el
+            }}
+            commands={props.slashCommands}
+            filter={slashFilter()}
+            onSelect={handleSlashSelect}
+            onClose={() => setShowSlashMenu(false)}
+          />
+        </Show>
+      </div>
+
+      {/* Textarea — borderless inside card */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        class="hidden"
+        onChange={handleFileSelect}
+      />
+      <textarea
+        ref={textareaRef}
+        value={text()}
+        onInput={handleInput}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder="Send a message..."
+        rows={1}
+        class="w-full resize-none bg-transparent border-none px-3 pt-3 pb-2 text-[13px] text-content placeholder:text-muted/60 focus:outline-none transition-colors"
+        style={{ 'min-height': '36px', 'max-height': '200px' }}
+      />
+
+      {/* Bottom toolbar — everything unified in one row */}
+      <div class="flex items-center gap-1 px-2 py-1.5 border-t border-border/50">
+        <button
+          type="button"
+          onClick={() => fileInputRef?.click()}
+          class="bg-transparent hover:bg-hover border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center text-muted hover:text-content"
+          title="Attach images"
+        >
+          <ImagePlus size={14} />
+        </button>
+        <div class="flex items-center gap-1 min-w-0">
           <AgentSelector
             projectPath={props.projectPath}
             value={props.agent}
@@ -297,7 +342,8 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
             onChange={props.onVariantChange}
           />
         </div>
-        <div class="hidden sm:flex items-center gap-2 ml-auto min-w-0 overflow-hidden">
+        <div class="flex-1" />
+        <div class="hidden sm:flex items-center gap-2 min-w-0 overflow-hidden">
           <Show when={props.isGenerating}>
             <span class="pulse-dots text-accent text-[11px] flex-shrink-0" />
             <span class="text-[11px] text-muted whitespace-nowrap">
@@ -305,50 +351,6 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
             </span>
           </Show>
         </div>
-      </div>
-
-      <div class="relative">
-        <Show when={showSlashMenu() && props.slashCommands.length > 0}>
-          <SlashMenu
-            ref={(el) => {
-              slashMenuRef = el
-            }}
-            commands={props.slashCommands}
-            filter={slashFilter()}
-            onSelect={handleSlashSelect}
-            onClose={() => setShowSlashMenu(false)}
-          />
-        </Show>
-      </div>
-
-      <div class="flex items-end gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          class="hidden"
-          onChange={handleFileSelect}
-        />
-        <textarea
-          ref={textareaRef}
-          value={text()}
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder="Send a message..."
-          rows={1}
-          class="flex-1 resize-none bg-app border border-border rounded-lg px-3 py-2 text-[13px] text-content placeholder:text-muted/60 focus:outline-none focus:border-accent transition-colors"
-          style={{ 'min-height': '36px', 'max-height': '200px' }}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef?.click()}
-          class="bg-transparent hover:bg-hover border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center h-9 text-muted hover:text-content"
-          title="Attach images"
-        >
-          <ImagePlus size={14} />
-        </button>
         <Show
           when={props.isGenerating}
           fallback={
@@ -356,7 +358,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
               type="button"
               onClick={submit}
               disabled={!canSend()}
-              class="bg-accent hover:bg-accent/80 disabled:opacity-30 text-white border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center disabled:cursor-default h-9 w-9"
+              class="bg-accent hover:bg-accent/80 disabled:opacity-30 text-white border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center disabled:cursor-default h-7 w-7"
               title="Send"
             >
               <ArrowUp size={14} />
@@ -366,7 +368,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
           <button
             type="button"
             onClick={() => props.onAbort()}
-            class="bg-status-stop hover:bg-status-stop/80 text-white border-none cursor-pointer p-2 rounded-lg transition-colors flex items-center justify-center h-9 w-9"
+            class="bg-status-stop hover:bg-status-stop/80 text-white border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center h-7 w-7"
             title="Stop generating"
           >
             <Square size={14} />
