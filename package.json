@@ -13,7 +13,7 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev -- --remote-debugging-port=9222",
     "build": "pnpm run typecheck && electron-vite build",
     "postinstall": "node scripts/postinstall.cjs",
     "build:unpack": "pnpm run build && electron-builder --dir",
