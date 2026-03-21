@@ -6,6 +6,8 @@ export interface AgentInfo {
   mode: 'subagent' | 'primary' | 'all'
   hidden?: boolean
   color?: string
+  model?: { providerID: string; modelID: string }
+  variant?: string
 }
 
 export interface ProviderModel {
@@ -39,6 +41,9 @@ interface OpcodeProjectState {
   variants: Record<string, Record<string, string[]>>
   sessions: Record<string, OcSession[]>
   slashCommands: Record<string, SlashCommand[]>
+  providerDefaults: Record<string, Record<string, string>>
+  configModel: Record<string, string>
+  configDefaultAgent: Record<string, string>
 }
 
 const [state, setState] = createStore<OpcodeProjectState>({
@@ -46,15 +51,36 @@ const [state, setState] = createStore<OpcodeProjectState>({
   models: {},
   variants: {},
   sessions: {},
-  slashCommands: {}
+  slashCommands: {},
+  providerDefaults: {},
+  configModel: {},
+  configDefaultAgent: {}
 })
 
 export { state as opcodeProject }
 
 export async function loadAgents(projectPath: string): Promise<void> {
-  const data = (await window.opencodeAPI.agents(projectPath)) as AgentInfo[] | null
+  const data = (await window.opencodeAPI.agents(projectPath)) as Array<{
+    name: string
+    description?: string
+    mode: 'subagent' | 'primary' | 'all'
+    hidden?: boolean
+    color?: string
+    model?: { modelID: string; providerID: string }
+    variant?: string
+  }> | null
   if (!data) return
-  const filtered = data.filter((a) => !a.hidden && (a.mode === 'primary' || a.mode === 'all'))
+  const filtered: AgentInfo[] = data
+    .filter((a) => !a.hidden && (a.mode === 'primary' || a.mode === 'all'))
+    .map((a) => ({
+      name: a.name,
+      description: a.description,
+      mode: a.mode,
+      hidden: a.hidden,
+      color: a.color,
+      model: a.model,
+      variant: a.variant
+    }))
   setState('agents', projectPath, filtered)
 }
 
@@ -65,6 +91,7 @@ export async function loadModels(projectPath: string): Promise<void> {
       name: string
       models: Record<string, { id: string; name: string; variants?: Record<string, VariantInfo> }>
     }>
+    default?: Record<string, string>
     connected: Array<string>
   } | null
   if (!data?.all) return
@@ -92,6 +119,24 @@ export async function loadModels(projectPath: string): Promise<void> {
 
   setState('models', projectPath, models)
   setState('variants', projectPath, variantsMap)
+
+  if (data.default) {
+    setState('providerDefaults', projectPath, data.default)
+  }
+}
+
+export async function loadConfig(projectPath: string): Promise<void> {
+  const data = (await window.opencodeAPI.config(projectPath)) as {
+    default_agent?: string
+    model?: string
+  } | null
+  if (!data) return
+  if (data.default_agent) {
+    setState('configDefaultAgent', projectPath, data.default_agent)
+  }
+  if (data.model) {
+    setState('configModel', projectPath, data.model)
+  }
 }
 
 export async function loadSessions(projectPath: string): Promise<void> {

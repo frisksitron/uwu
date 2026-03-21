@@ -1,4 +1,5 @@
 import { createStore, produce } from 'solid-js/store'
+import { pushRecent, restore } from './opcodeLocal'
 import { updateSessionTitle } from './opcodeProject'
 import { setServerError } from './opcodeServer'
 
@@ -417,6 +418,13 @@ export async function loadMessages(projectPath: string, sessionId: string): Prom
   if (lastUser?.info.variant) {
     setState('sessionVariants', sessionId, lastUser.info.variant)
   }
+  if (lastUser) {
+    restore(projectPath, sessionId, {
+      agent: lastUser.info.agent,
+      model: lastUser.info.model,
+      variant: lastUser.info.variant
+    })
+  }
 }
 
 export async function sendMessage(
@@ -582,7 +590,7 @@ export function initEventListener(): () => void {
   const cleanupError = window.opencodeAPI.onEventError((_projectPath: string, _error: string) => {
     setServerError()
   })
-  const cleanupEvent = window.opencodeAPI.onEvent((_projectPath: string, rawEvent: unknown) => {
+  const cleanupEvent = window.opencodeAPI.onEvent((projectPath: string, rawEvent: unknown) => {
     const event = rawEvent as { type: string; properties: Record<string, unknown> }
     if (!event?.type) return
 
@@ -664,6 +672,7 @@ export function initEventListener(): () => void {
           if (msg.agent) setState('sessionAgents', msg.sessionID, msg.agent)
           if (msg.model) setState('sessionModels', msg.sessionID, msg.model)
           if (msg.variant) setState('sessionVariants', msg.sessionID, msg.variant)
+          if (msg.model) pushRecent(projectPath, msg.model)
         }
         const error: OcMessageError | undefined = msg.error ? parseError(msg.error) : undefined
 
