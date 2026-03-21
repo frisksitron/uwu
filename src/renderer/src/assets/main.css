@@ -263,6 +263,25 @@
   animation: pulse-dot 1.4s infinite ease-in-out;
 }
 
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dropdown-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-4px) scale(0.97); }
+}
+
+.kobalte-dropdown {
+  transform-origin: var(--kb-select-content-transform-origin, top);
+  animation: dropdown-out 120ms ease-in forwards;
+}
+
+.kobalte-dropdown[data-expanded] {
+  animation: dropdown-in 150ms ease-out;
+}
+
 .dnd-dragging {
   opacity: 0.3;
 }
