@@ -402,7 +402,7 @@ export default function ActivityBox(props: ActivityBoxProps): JSX.Element {
   return (
     <Show when={shouldRender()}>
       <div
-        class="activity-box mx-auto bg-app border border-border rounded-xl overflow-hidden mb-1.5 shadow-md"
+        class="activity-box mx-auto bg-sidebar border border-icon-ai/25 rounded-xl overflow-hidden mb-1.5 shadow-md"
         style={{ 'max-width': hasQuestions() ? '28rem' : '20rem' }}
         classList={{
           'activity-box-visible': isVisible() && !hasQuestions(),
@@ -442,9 +442,7 @@ export default function ActivityBox(props: ActivityBoxProps): JSX.Element {
             )}
           </For>
           <Show when={overflowCount() > 0}>
-            <div class="text-[11px] text-muted/60 italic pl-[19px]">
-              +{overflowCount()} more running...
-            </div>
+            <div class="text-[11px] text-muted/60 italic pl-[19px]">+{overflowCount()} more...</div>
           </Show>
         </div>
 

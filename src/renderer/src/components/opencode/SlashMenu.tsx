@@ -87,7 +87,7 @@ export default function SlashMenu(props: SlashMenuProps): JSX.Element {
                     'bg-blue-500/20 text-blue-400': cmd.source === 'mcp'
                   }}
                 >
-                  {cmd.source}
+                  {cmd.source === 'mcp' ? 'tool' : cmd.source}
                 </span>
               </button>
             )}

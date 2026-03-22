@@ -97,9 +97,7 @@ function QuestionItem(props: {
       {/* Header */}
       <div class="flex items-center gap-1.5">
         <Sparkles size={12} class="text-heading" />
-        <span class="text-heading text-[11px] font-semibold tracking-wider uppercase">
-          Question
-        </span>
+        <span class="text-heading text-[11px] font-semibold tracking-wide">Needs your input</span>
       </div>
 
       {/* Current question content */}
@@ -156,7 +154,7 @@ function QuestionItem(props: {
         <Show when={currentQuestion().custom !== false}>
           <input
             type="text"
-            placeholder="Custom answer..."
+            placeholder="Type your own..."
             value={customTexts()[stepIndex()]}
             onInput={(e) => setCustomText(stepIndex(), e.currentTarget.value)}
             class="bg-app border border-border rounded-md px-2.5 py-1.5 text-[13px] text-content outline-none focus:border-accent focus:ring-1 focus:ring-accent/20 w-full max-w-xs placeholder:text-muted/50 transition-colors"

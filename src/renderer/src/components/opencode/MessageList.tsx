@@ -15,20 +15,6 @@ import PatchDiffView from './PatchDiffView'
 interface MessageListProps {
   messages: OcMessage[]
   streamingContent: Record<string, string>
-  generationDuration?: number
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-}
-
-function formatDuration(ms: number): string {
-  const s = Math.round(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  const rem = s % 60
-  return rem > 0 ? `${m}m ${rem}s` : `${m}m`
 }
 
 function MessagePart(props: {
@@ -110,7 +96,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
           </div>
           <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
             {props.error.providerID
-              ? `Could not authenticate with provider "${props.error.providerID}". Check your API key.`
+              ? `Couldn't authenticate with ${props.error.providerID} — double-check your API key is set.`
               : props.error.message}
           </p>
         </div>
@@ -123,8 +109,8 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
             <span class="text-warning font-semibold">Context limit reached</span>
           </div>
           <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
-            The conversation is too long for the model's context window. Try starting a new session
-            or compacting this one.
+            This conversation got too long for the model to handle. Start a new session, or type
+            /compact to summarize and continue.
           </p>
         </div>
       </Match>
@@ -136,7 +122,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
             <span class="text-warning font-semibold">Output truncated</span>
           </div>
           <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
-            The response exceeded the maximum output length and was cut short.
+            The response hit the output limit and was cut short. You can ask the AI to continue.
           </p>
         </div>
       </Match>
@@ -166,7 +152,7 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
             </span>
           </div>
           <p class="text-content/70 text-[11px] mt-1 leading-relaxed">
-            {props.error.message} — this error is retryable, try sending your message again.
+            {props.error.message} — you can retry by sending your message again.
           </p>
         </div>
       </Match>
@@ -175,25 +161,10 @@ function MessageError(props: { error: OcMessageError }): JSX.Element {
 }
 
 export default function MessageList(props: MessageListProps): JSX.Element {
-  const lastAssistantMsg = () => {
-    for (let i = props.messages.length - 1; i >= 0; i--) {
-      if (props.messages[i].role === 'assistant') return props.messages[i]
-    }
-    return undefined
-  }
-
   return (
-    <div class="flex flex-col gap-3 p-3">
+    <div class="flex flex-col gap-3 px-7 pt-3 pb-12 max-w-3xl mx-auto w-full">
       <For each={props.messages}>
-        {(msg, idx) => {
-          const showTurnSeparator = () => {
-            if (idx() === 0) return false
-            const prev = props.messages[idx() - 1]
-            return msg.role === 'user' && prev.role === 'assistant'
-          }
-
-          const isLastAssistant = () => msg === lastAssistantMsg()
-
+        {(msg) => {
           const isEditTool = (p: OcPart) => {
             if (p.type !== 'tool') return false
             const tool = p as OcToolPart
@@ -234,41 +205,13 @@ export default function MessageList(props: MessageListProps): JSX.Element {
 
           return (
             <Show when={!shouldHide()}>
-              <Show when={showTurnSeparator()}>
-                <div class="border-t border-border/50 my-2" />
-              </Show>
-              <div
-                class="flex flex-col gap-1"
-                classList={{
-                  'items-end': msg.role === 'user',
-                  'items-start': msg.role === 'assistant'
-                }}
-              >
-                <div class="flex items-center gap-2 px-3">
-                  <span class="text-[11px] text-muted select-none">
-                    {msg.role === 'user' ? 'You' : 'Assistant'}
-                  </span>
-                  <Show when={msg.createdAt}>
-                    <span class="text-[11px] text-muted/60 select-none">
-                      {formatTime(msg.createdAt)}
-                    </span>
-                  </Show>
-                  <Show
-                    when={
-                      isLastAssistant() && props.generationDuration && props.generationDuration > 0
-                    }
-                  >
-                    <span class="text-[11px] text-muted/60 select-none">
-                      &middot; {formatDuration(props.generationDuration || 0)}
-                    </span>
-                  </Show>
-                </div>
+              <div class="flex flex-col gap-1.5" classList={{ 'items-end': msg.role === 'user' }}>
                 <Show when={bubbleParts().length > 0 || msg.error || msg.role === 'user'}>
                   <div
-                    class="max-w-3xl rounded-lg px-3 py-2 space-y-2"
+                    class="max-w-3xl py-2 space-y-2"
                     classList={{
-                      'bg-accent/15 border border-accent/30': msg.role === 'user',
-                      'bg-sidebar border border-border': msg.role === 'assistant'
+                      'bg-accent/15 border border-accent/30 rounded-lg w-fit px-3':
+                        msg.role === 'user'
                     }}
                   >
                     <For each={bubbleParts()}>
@@ -277,7 +220,7 @@ export default function MessageList(props: MessageListProps): JSX.Element {
                       )}
                     </For>
                     <Show when={!msg.error && visibleParts().length === 0 && msg.role === 'user'}>
-                      <span class="text-muted text-[11px] italic">...</span>
+                      <span class="text-muted text-[11px] italic">(empty message)</span>
                     </Show>
                     <Show when={msg.error}>{(error) => <MessageError error={error()} />}</Show>
                   </div>

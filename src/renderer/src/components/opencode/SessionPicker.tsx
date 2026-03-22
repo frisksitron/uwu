@@ -31,7 +31,7 @@ export default function SessionPicker(props: SessionPickerProps): JSX.Element {
       when={sorted().length > 0}
       fallback={
         <p class="text-muted text-[11px] opacity-60 text-center py-2 select-none">
-          No previous sessions
+          No sessions yet
         </p>
       }
     >

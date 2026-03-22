@@ -108,8 +108,6 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   const streamingContent = () => opcodeChat.smoothContent
   const generationStartTime = () =>
     props.sessionId ? opcodeChat.generationStartTimes[props.sessionId] : undefined
-  const generationDuration = () =>
-    props.sessionId ? opcodeChat.generationDurations[props.sessionId] : undefined
   const inputHistory = () =>
     messages()
       .filter((m) => m.role === 'user')
@@ -242,7 +240,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
   return (
     <div
-      class="w-full h-full absolute top-0 left-0 flex flex-col bg-white"
+      class="w-full h-full absolute top-0 left-0 flex flex-col bg-app"
       classList={{
         invisible: !props.visible,
         'pointer-events-none': !props.visible
@@ -250,19 +248,19 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     >
       {/* Loading state — shown until server connects and data loads */}
       <Show when={!loaded() && !serverError()}>
-        <div class="flex-1 flex items-center justify-center bg-white">
+        <div class="flex-1 flex items-center justify-center bg-app">
           <div class="flex flex-col items-center gap-3 select-none">
             <Loader2 size={24} class="text-accent animate-spin" />
-            <p class="text-muted text-[13px] m-0">Connecting to AI server...</p>
+            <p class="text-muted text-[13px] m-0">Starting up...</p>
           </div>
         </div>
       </Show>
 
       {/* Server error state */}
       <Show when={serverError()}>
-        <div class="flex-1 flex items-center justify-center bg-white">
+        <div class="flex-1 flex items-center justify-center bg-app">
           <p class="text-error text-[13px] select-none">
-            Failed to start AI server. Check your configuration and try again.
+            Couldn't connect — make sure opencode is installed and your API keys are set up.
           </p>
         </div>
       </Show>
@@ -282,7 +280,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
               'text-accent': showRaw(),
               'text-muted hover:text-content': !showRaw()
             }}
-            title="Toggle raw event log"
+            title="Debug log"
           >
             <Bug size={14} />
           </button>
@@ -333,17 +331,13 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
         <div class="flex-1 flex min-h-0">
           <div
             ref={scrollRef}
-            class="overflow-y-auto bg-white relative"
+            class="overflow-y-auto bg-app relative [scrollbar-gutter:stable]"
             classList={{ 'w-1/2': showRaw(), 'w-full': !showRaw() }}
             onScroll={handleScroll}
           >
             <div ref={contentRef} class="min-h-full flex flex-col">
               {/* Always mounted — empty <For> renders nothing, no teardown on session change */}
-              <MessageList
-                messages={messages()}
-                streamingContent={streamingContent()}
-                generationDuration={generationDuration()}
-              />
+              <MessageList messages={messages()} streamingContent={streamingContent()} />
               {/* Empty state — shown when idle with no messages */}
               <Show when={!props.sessionId && messages().length === 0 && !isGenerating()}>
                 <div class="flex items-center justify-center flex-1">
@@ -407,8 +401,9 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
         {/* Chat input + activity box overlay — only when a session is active */}
         <Show when={props.sessionId}>
-          <div class="relative flex-shrink-0">
-            <div class="absolute bottom-full left-0 right-0 z-10">
+          <div class="relative flex-shrink-0 pb-3">
+            <div class="absolute -top-6 left-0 right-0 h-6 bg-gradient-to-t from-app to-transparent pointer-events-none z-0" />
+            <div class="absolute bottom-full left-0 right-0 z-10 flex justify-center">
               <ActivityBox
                 sessionId={props.sessionId}
                 isGenerating={isGenerating()}
@@ -417,22 +412,24 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
                 onQuestionReject={handleQuestionReject}
               />
             </div>
-            <ChatInput
-              isGenerating={isGenerating()}
-              generationStartTime={generationStartTime()}
-              history={inputHistory()}
-              slashCommands={getSlashCommands(props.projectPath)}
-              onSend={handleSend}
-              onAbort={handleAbort}
-              visible={props.visible}
-              projectPath={props.projectPath}
-              model={model()}
-              onModelChange={handleModelChange}
-              agent={agent()}
-              onAgentChange={handleAgentChange}
-              variant={variant()}
-              onVariantChange={handleVariantChange}
-            />
+            <div class="max-w-3xl mx-auto w-full px-3">
+              <ChatInput
+                isGenerating={isGenerating()}
+                generationStartTime={generationStartTime()}
+                history={inputHistory()}
+                slashCommands={getSlashCommands(props.projectPath)}
+                onSend={handleSend}
+                onAbort={handleAbort}
+                visible={props.visible}
+                projectPath={props.projectPath}
+                model={model()}
+                onModelChange={handleModelChange}
+                agent={agent()}
+                onAgentChange={handleAgentChange}
+                variant={variant()}
+                onVariantChange={handleVariantChange}
+              />
+            </div>
           </div>
         </Show>
       </Show>
