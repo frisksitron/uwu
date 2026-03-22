@@ -6,52 +6,66 @@ OPENCODE_VERSION="v1.2.27"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUT_DIR="$PROJECT_ROOT/resources/bin"
+BASE_URL="https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}"
 
-# Determine platform and architecture
+# Determine platform
 case "$OSTYPE" in
   darwin*)  PLATFORM="darwin" ;;
   msys*|cygwin*|win32*) PLATFORM="windows" ;;
   *)        PLATFORM="linux" ;;
 esac
 
-ARCH=$(uname -m)
-case "$ARCH" in
-  x86_64|amd64) ARCH="x64" ;;
-  aarch64|arm64) ARCH="arm64" ;;
-esac
-
-# Build asset name and download URL
-if [ "$PLATFORM" = "linux" ]; then
-  ASSET="opencode-${PLATFORM}-${ARCH}.tar.gz"
-else
-  ASSET="opencode-${PLATFORM}-${ARCH}.zip"
-fi
-
-URL="https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/${ASSET}"
-
-echo "Downloading opencode ${OPENCODE_VERSION} (${PLATFORM}/${ARCH})..."
-
-# Download to temp directory
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
-
-curl -fSL "$URL" -o "$TMPDIR/$ASSET"
-
-# Extract
 mkdir -p "$OUT_DIR"
 
-if [[ "$ASSET" == *.tar.gz ]]; then
-  tar -xzf "$TMPDIR/$ASSET" -C "$TMPDIR"
-else
-  unzip -o "$TMPDIR/$ASSET" -d "$TMPDIR"
-fi
+# Download and extract a single opencode binary
+# Usage: download_opencode <platform> <arch> <dest>
+download_opencode() {
+  local plat="$1" arch="$2" dest="$3"
+  local asset url tmpdir
 
-# Copy binary
-if [ "$PLATFORM" = "windows" ]; then
-  cp "$TMPDIR/opencode.exe" "$OUT_DIR/opencode.exe"
+  if [ "$plat" = "linux" ]; then
+    asset="opencode-${plat}-${arch}.tar.gz"
+  else
+    asset="opencode-${plat}-${arch}.zip"
+  fi
+
+  url="${BASE_URL}/${asset}"
+  tmpdir=$(mktemp -d)
+
+  echo "Downloading opencode ${OPENCODE_VERSION} (${plat}/${arch})..."
+  curl -fSL "$url" -o "$tmpdir/$asset"
+
+  if [[ "$asset" == *.tar.gz ]]; then
+    tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+  else
+    unzip -o "$tmpdir/$asset" -d "$tmpdir"
+  fi
+
+  if [ "$plat" = "windows" ]; then
+    cp "$tmpdir/opencode.exe" "$dest"
+  else
+    cp "$tmpdir/opencode" "$dest"
+    chmod +x "$dest"
+  fi
+
+  rm -rf "$tmpdir"
+}
+
+if [ "$PLATFORM" = "darwin" ]; then
+  # macOS: download both architectures and create universal binary with lipo
+  download_opencode darwin x64 "$OUT_DIR/opencode-x64"
+  download_opencode darwin arm64 "$OUT_DIR/opencode-arm64"
+  lipo -create "$OUT_DIR/opencode-x64" "$OUT_DIR/opencode-arm64" -output "$OUT_DIR/opencode"
+  rm "$OUT_DIR/opencode-x64" "$OUT_DIR/opencode-arm64"
+elif [ "$PLATFORM" = "windows" ]; then
+  download_opencode windows x64 "$OUT_DIR/opencode.exe"
 else
-  cp "$TMPDIR/opencode" "$OUT_DIR/opencode"
-  chmod +x "$OUT_DIR/opencode"
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    x86_64|amd64) ARCH="x64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+  esac
+  download_opencode linux "$ARCH" "$OUT_DIR/opencode"
 fi
 
 echo "opencode ${OPENCODE_VERSION} -> $OUT_DIR"
