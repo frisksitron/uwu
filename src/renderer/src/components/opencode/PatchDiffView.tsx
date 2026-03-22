@@ -16,13 +16,13 @@ function RunningPatchView(props: { input: Record<string, unknown> }): JSX.Elemen
         <Show
           when={html()}
           fallback={
-            <pre class="bg-app border border-border/60 rounded-md p-2 overflow-x-auto text-[11px] text-content whitespace-pre-wrap leading-relaxed">
+            <pre class="bg-app border border-border/60 rounded-lg p-2 overflow-x-auto text-[11px] text-content whitespace-pre-wrap leading-relaxed">
               {patchText()}
             </pre>
           }
         >
           {(h) => (
-            <div class="border border-border/60 rounded-md overflow-hidden" innerHTML={h()} />
+            <div class="border border-border/60 rounded-lg overflow-hidden" innerHTML={h()} />
           )}
         </Show>
       </div>

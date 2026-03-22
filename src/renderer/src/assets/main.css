@@ -106,9 +106,13 @@
 
 .markdown table {
   font-size: 11px;
-  border-collapse: collapse;
+  border-spacing: 0;
+  border-collapse: separate;
   width: 100%;
   margin: 0.5em 0;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  overflow: hidden;
 }
 
 .markdown th {
@@ -119,8 +123,18 @@
 
 .markdown th,
 .markdown td {
-  border: 1px solid var(--color-border);
-  padding: 0.3em 0.5em;
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  padding: 0.5em 0.75em;
+}
+
+.markdown th:last-child,
+.markdown td:last-child {
+  border-right: none;
+}
+
+.markdown tr:last-child td {
+  border-bottom: none;
 }
 
 .markdown tr:nth-child(even) {
@@ -147,7 +161,7 @@
 
 .shiki-wrapper pre {
   border: 1px solid var(--color-border);
-  border-radius: 0.25rem;
+  border-radius: 0.5rem;
   padding: 0.625rem;
   overflow-x: auto;
   font-size: 12px;
