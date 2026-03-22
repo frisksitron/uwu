@@ -8,17 +8,21 @@ const [settingsCorrupted, setSettingsCorrupted] = createSignal(false)
 export { settings, setSettings, settingsCorrupted }
 
 export async function loadSettings(): Promise<void> {
-  const { data, corrupted } = await window.settingsAPI.load()
-  setSettings(reconcile(data))
-  if (corrupted) setSettingsCorrupted(true)
+  const result = (await window.persistAPI.load('settings')) as {
+    data: AppSettings
+    corrupted: boolean
+  }
+  setSettings(reconcile(result.data))
+  if (result.corrupted) setSettingsCorrupted(true)
 }
 
-export async function saveSettings(): Promise<void> {
-  await window.settingsAPI.save(unwrap(settings))
+export function saveSettings(): void {
+  window.persistAPI.update('settings', unwrap(settings))
 }
 
-export async function resetSettings(): Promise<void> {
-  const defaults = await window.settingsAPI.reset()
+export function resetSettings(): void {
+  const defaults = structuredClone(DEFAULT_SETTINGS)
+  window.persistAPI.update('settings', defaults)
   setSettings(reconcile(defaults))
   setSettingsCorrupted(false)
 }

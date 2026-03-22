@@ -23,17 +23,11 @@ interface TerminalAPI {
   onExit: (
     callback: (id: number, exitCode: number, signal: number | undefined) => void
   ) => () => void
-  saveCache: (
-    data: Record<string, import('../renderer/src/types').TerminalCacheEntry>
-  ) => Promise<void>
-  loadCache: () => Promise<Record<string, import('../renderer/src/types').TerminalCacheEntry>>
 }
 
 interface ProjectAPI {
   selectFolder: () => Promise<string | null>
   selectFiles: (defaultPath: string) => Promise<string[]>
-  loadProjects: () => Promise<import('../shared/types').Project[]>
-  saveProjects: (projects: import('../shared/types').ProjectEntry[]) => Promise<void>
 }
 
 interface WorktreeAPI {
@@ -135,10 +129,13 @@ interface DiffAPI {
 }
 
 interface SettingsAPI {
-  load: () => Promise<{ data: import('../shared/types').AppSettings; corrupted: boolean }>
-  save: (settings: import('../shared/types').AppSettings) => Promise<void>
-  reset: () => Promise<import('../shared/types').AppSettings>
   getMonoFonts: () => Promise<string[]>
+}
+
+interface PersistAPI {
+  load: (section: string) => Promise<unknown>
+  update: (section: string, data: unknown) => void
+  flush: () => Promise<void>
 }
 
 declare global {
@@ -152,6 +149,7 @@ declare global {
     opencodeAPI: OpencodeAPI
     diffAPI: DiffAPI
     settingsAPI: SettingsAPI
+    persistAPI: PersistAPI
     updaterAPI: UpdaterAPI
   }
 }

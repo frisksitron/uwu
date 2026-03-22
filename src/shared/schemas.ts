@@ -97,6 +97,16 @@ export const ProjectEntrySchema = type({
 
 export type ProjectEntry = typeof ProjectEntrySchema.infer
 
+// --- UI State schemas ---
+
+export const UiStateSchema = type({
+  'activeTabId?': 'string | null',
+  'sidebarCollapsed?': 'boolean',
+  'sidebarWidth?': 'number'
+})
+
+export type UiState = typeof UiStateSchema.infer
+
 // --- Terminal cache schemas ---
 
 export const TerminalCacheEntrySchema = type({

@@ -36,22 +36,13 @@ const terminalAPI = {
     ): void => cb(id, code, signal)
     ipcRenderer.on('terminal:exit', handler)
     return () => ipcRenderer.removeListener('terminal:exit', handler)
-  },
-  saveCache: (
-    data: Record<string, import('../renderer/src/types').TerminalCacheEntry>
-  ): Promise<void> => ipcRenderer.invoke('terminal-cache:save', data),
-  loadCache: (): Promise<Record<string, import('../renderer/src/types').TerminalCacheEntry>> =>
-    ipcRenderer.invoke('terminal-cache:load')
+  }
 }
 
 const projectAPI = {
   selectFolder: (): Promise<string | null> => ipcRenderer.invoke('project:select-folder'),
   selectFiles: (defaultPath: string): Promise<string[]> =>
-    ipcRenderer.invoke('project:select-files', defaultPath),
-  loadProjects: (): Promise<import('../shared/types').Project[]> =>
-    ipcRenderer.invoke('projects:load'),
-  saveProjects: (projects: import('../shared/types').ProjectEntry[]): Promise<void> =>
-    ipcRenderer.invoke('projects:save', projects)
+    ipcRenderer.invoke('project:select-files', defaultPath)
 }
 
 const worktreeAPI = {
@@ -197,12 +188,14 @@ const diffAPI = {
 }
 
 const settingsAPI = {
-  load: (): Promise<{ data: import('../shared/types').AppSettings; corrupted: boolean }> =>
-    ipcRenderer.invoke('settings:load'),
-  save: (settings: import('../shared/types').AppSettings): Promise<void> =>
-    ipcRenderer.invoke('settings:save', settings),
-  reset: (): Promise<import('../shared/types').AppSettings> => ipcRenderer.invoke('settings:reset'),
   getMonoFonts: (): Promise<string[]> => ipcRenderer.invoke('settings:get-mono-fonts')
+}
+
+const persistAPI = {
+  load: (section: string): Promise<unknown> => ipcRenderer.invoke('persist:load', section),
+  update: (section: string, data: unknown): void =>
+    ipcRenderer.send('persist:update', section, data),
+  flush: (): Promise<void> => ipcRenderer.invoke('persist:flush')
 }
 
 const updaterAPI = {
@@ -250,6 +243,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('opencodeAPI', opencodeAPI)
     contextBridge.exposeInMainWorld('diffAPI', diffAPI)
     contextBridge.exposeInMainWorld('settingsAPI', settingsAPI)
+    contextBridge.exposeInMainWorld('persistAPI', persistAPI)
     contextBridge.exposeInMainWorld('updaterAPI', updaterAPI)
   } catch (error) {
     console.error(error)
@@ -271,6 +265,8 @@ if (process.contextIsolated) {
   window.diffAPI = diffAPI
   // @ts-expect-error (window.settingsAPI is not in the declared Window type)
   window.settingsAPI = settingsAPI
+  // @ts-expect-error (window.persistAPI is not in the declared Window type)
+  window.persistAPI = persistAPI
   // @ts-expect-error (window.updaterAPI is not in the declared Window type)
   window.updaterAPI = updaterAPI
 }

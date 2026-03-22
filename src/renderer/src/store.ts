@@ -2,7 +2,7 @@ import { createMemo, createRoot } from 'solid-js'
 import { createStore, unwrap } from 'solid-js/store'
 import type { ProjectEntry } from '../../shared/types'
 import { isOpen } from './tabRuntime'
-import type { AppState } from './types'
+import type { AppState, Project } from './types'
 
 export const [store, setStore] = createStore<AppState>({
   projects: [],
@@ -10,15 +10,47 @@ export const [store, setStore] = createStore<AppState>({
 })
 
 export async function loadProjects(): Promise<void> {
-  const projects = await window.projectAPI.loadProjects()
+  const projects = (await window.persistAPI.load('projects')) as Project[]
   setStore('projects', projects)
 }
 
-export async function saveProjects(): Promise<void> {
+export async function loadUiState(): Promise<{
+  sidebarCollapsed: boolean
+  sidebarWidth: number
+}> {
+  const ui = (await window.persistAPI.load('ui')) as {
+    activeTabId?: string | null
+    sidebarCollapsed?: boolean
+    sidebarWidth?: number
+  } | null
+  if (!ui) return { sidebarCollapsed: false, sidebarWidth: 240 }
+
+  // Validate activeTabId exists in loaded projects before restoring
+  if (ui.activeTabId) {
+    let found = false
+    for (const project of store.projects) {
+      for (const items of Object.values(project.workspaces ?? {})) {
+        if (items.some((item) => item.id === ui.activeTabId)) {
+          found = true
+          break
+        }
+      }
+      if (found) break
+    }
+    if (found) setStore('activeTabId', ui.activeTabId)
+  }
+
+  return {
+    sidebarCollapsed: ui.sidebarCollapsed ?? false,
+    sidebarWidth: ui.sidebarWidth ?? 240
+  }
+}
+
+export function saveProjects(): void {
   const projects = structuredClone(unwrap(store.projects)).map(
     ({ isGit, worktrees, ...rest }) => rest
   )
-  await window.projectAPI.saveProjects(projects as ProjectEntry[])
+  window.persistAPI.update('projects', projects as ProjectEntry[])
 }
 
 /**

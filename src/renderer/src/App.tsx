@@ -9,7 +9,7 @@ import {
   onMount,
   Show
 } from 'solid-js'
-import { produce, unwrap } from 'solid-js/store'
+import { produce } from 'solid-js/store'
 import DiffView from './components/DiffView'
 import OpencodeView from './components/OpencodeView'
 import ScriptView from './components/ScriptView'
@@ -25,44 +25,88 @@ import {
   loadSettings,
   matchesBinding,
   resetSettings,
+  saveSettings,
   settings,
   settingsCorrupted
 } from './settingsStore'
-import { loadProjects, saveProjects, setStore, store, visualTabOrder } from './store'
+import { loadProjects, loadUiState, saveProjects, setStore, store, visualTabOrder } from './store'
 import { closeTab as closeTabRuntime, isOpen, setTabStatus, tabRuntime } from './tabRuntime'
 import type { TerminalCacheEntry, WorkspaceTab } from './types'
 
 const IDLE_RESET_DELAY_MS = 5 * 60_000
+const CACHE_SAVE_INTERVAL_MS = 60_000
 const terminalSnapshots = new Map<string, { lastOutput: string; title: string }>()
 
 export default function App(): JSX.Element {
   let initialLoadDone = false
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false)
+  const [sidebarWidth, setSidebarWidth] = createSignal(240)
+
   onMount(async () => {
     await loadSettings()
     await loadProjects()
+    const ui = await loadUiState()
+    setSidebarCollapsed(ui.sidebarCollapsed)
+    setSidebarWidth(ui.sidebarWidth)
     initialLoadDone = true
   })
 
-  // Auto-save projects whenever they change (debounced)
-  let saveTimer: ReturnType<typeof setTimeout> | undefined
+  // --- Auto-save: projects (debounced 300ms) ---
+  let projectSaveTimer: ReturnType<typeof setTimeout> | undefined
   createEffect(
     on(
-      () => JSON.stringify(unwrap(store.projects)),
+      () => JSON.stringify(store.projects),
       () => {
         if (!initialLoadDone) return
-        clearTimeout(saveTimer)
-        saveTimer = setTimeout(() => saveProjects(), 300)
+        clearTimeout(projectSaveTimer)
+        projectSaveTimer = setTimeout(() => saveProjects(), 300)
       }
     )
   )
-  onCleanup(() => clearTimeout(saveTimer))
+  onCleanup(() => clearTimeout(projectSaveTimer))
 
+  // --- Auto-save: settings (debounced 500ms) ---
+  let settingsSaveTimer: ReturnType<typeof setTimeout> | undefined
+  createEffect(
+    on(
+      () => JSON.stringify(settings),
+      () => {
+        if (!initialLoadDone) return
+        clearTimeout(settingsSaveTimer)
+        settingsSaveTimer = setTimeout(() => saveSettings(), 500)
+      }
+    )
+  )
+  onCleanup(() => clearTimeout(settingsSaveTimer))
+
+  // --- Auto-save: UI state (debounced 300ms) ---
+  let uiSaveTimer: ReturnType<typeof setTimeout> | undefined
+  createEffect(
+    on(
+      () => ({
+        activeTabId: store.activeTabId,
+        sidebarCollapsed: sidebarCollapsed(),
+        sidebarWidth: sidebarWidth()
+      }),
+      (ui) => {
+        if (!initialLoadDone) return
+        clearTimeout(uiSaveTimer)
+        uiSaveTimer = setTimeout(() => {
+          window.persistAPI.update('ui', ui)
+        }, 300)
+      }
+    )
+  )
+  onCleanup(() => clearTimeout(uiSaveTimer))
+
+  // --- Opencode event listener ---
   let cleanupEvents: (() => void) | undefined
   onMount(() => {
     cleanupEvents = initEventListener()
   })
   onCleanup(() => cleanupEvents?.())
 
+  // --- Terminal cache ---
   const saveTerminalCache = async (): Promise<void> => {
     if (terminalSnapshots.size === 0) return
     const cache: Record<string, TerminalCacheEntry> = {}
@@ -76,23 +120,31 @@ export default function App(): JSX.Element {
       }
     }
     if (Object.keys(cache).length > 0) {
-      await window.terminalAPI.saveCache(cache)
+      window.persistAPI.update('terminalCache', cache)
     }
   }
+
+  // Periodic terminal cache save (crash protection)
+  let cacheInterval: ReturnType<typeof setInterval> | undefined
+  onMount(() => {
+    cacheInterval = setInterval(() => {
+      saveTerminalCache().catch(() => {})
+    }, CACHE_SAVE_INTERVAL_MS)
+  })
+  onCleanup(() => clearInterval(cacheInterval))
 
   const handleBeforeUnload = (): void => {
     saveTerminalCache().catch(() => {})
   }
-
   onMount(() => window.addEventListener('beforeunload', handleBeforeUnload))
   onCleanup(() => window.removeEventListener('beforeunload', handleBeforeUnload))
 
-  // Graceful close: save state before window closes
+  // Graceful close: flush all state before window closes
   let cleanupCloseRequested: (() => void) | undefined
   onMount(() => {
     cleanupCloseRequested = window.windowAPI.onCloseRequested(async () => {
-      await saveProjects()
-      await saveTerminalCache().catch(() => {})
+      await saveTerminalCache()
+      await window.persistAPI.flush()
       window.windowAPI.confirmClose()
     })
   })
@@ -130,9 +182,6 @@ export default function App(): JSX.Element {
 
   onMount(() => window.addEventListener('keydown', handleKeyDown))
   onCleanup(() => window.removeEventListener('keydown', handleKeyDown))
-
-  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false)
-  const [sidebarWidth, setSidebarWidth] = createSignal(240)
 
   function startResize(e: MouseEvent): void {
     e.preventDefault()

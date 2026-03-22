@@ -154,11 +154,12 @@ export default function Terminal(props: TerminalProps): JSX.Element {
       if (persistentTerminalId) {
         const lastOutput = readTerminalBuffer(term)
         const entry = { lastOutput, title: currentTitle, savedAt: Date.now() }
-        window.terminalAPI
-          .loadCache()
+        window.persistAPI
+          .load('terminalCache')
           .then((cache) => {
-            cache[persistentTerminalId] = entry
-            return window.terminalAPI.saveCache(cache)
+            const c = (cache ?? {}) as Record<string, unknown>
+            c[persistentTerminalId] = entry
+            window.persistAPI.update('terminalCache', c)
           })
           .catch(() => {})
       }
@@ -177,7 +178,10 @@ export default function Terminal(props: TerminalProps): JSX.Element {
     ;(async () => {
       if (props.persistentTerminalId) {
         try {
-          const cache = await window.terminalAPI.loadCache()
+          const cache = (await window.persistAPI.load('terminalCache')) as Record<
+            string,
+            { lastOutput?: string; title?: string; savedAt?: number }
+          >
           const entry = cache[props.persistentTerminalId]
           if (entry?.lastOutput) {
             const dimmed = entry.lastOutput

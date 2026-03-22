@@ -1,44 +1,5 @@
 import { execFile } from 'node:child_process'
-import { type } from 'arktype'
 import { ipcMain } from 'electron'
-import Store from 'electron-store'
-import { AppSettingsSchema } from '../../shared/schemas'
-import { type AppSettings, DEFAULT_SETTINGS } from '../../shared/types'
-
-const PLATFORM_DEFAULT_FONT =
-  process.platform === 'darwin'
-    ? 'Menlo'
-    : process.platform === 'win32'
-      ? 'Consolas'
-      : 'DejaVu Sans Mono'
-
-const settingsStore = new Store<{ settings: AppSettings }>({
-  name: 'settings',
-  defaults: { settings: DEFAULT_SETTINGS }
-})
-
-export function getSettingsStore(): Store<{ settings: AppSettings }> {
-  return settingsStore
-}
-
-// Merges saved settings over defaults, only carrying forward keys that exist in defaults.
-// This ensures new keys get default values and removed keys are dropped on upgrade.
-// biome-ignore lint/suspicious/noExplicitAny: recursive merge needs any
-function deepMerge(defaults: any, saved: any): any {
-  if (!saved || typeof saved !== 'object' || typeof defaults !== 'object') return defaults
-  const result = { ...defaults }
-  for (const key of Object.keys(defaults)) {
-    const def = defaults[key]
-    const val = saved[key]
-    if (val === undefined) continue
-    if (def && typeof def === 'object' && !Array.isArray(def) && val && typeof val === 'object') {
-      result[key] = deepMerge(def, val)
-    } else {
-      result[key] = val
-    }
-  }
-  return result
-}
 
 let monoFontPromise: Promise<string[]> | null = null
 
@@ -111,32 +72,6 @@ function detectMonoFonts(): Promise<string[]> {
   return monoFontPromise
 }
 
-export function setupSettingsIpc(): void {
-  ipcMain.handle('settings:load', () => {
-    const saved = settingsStore.get('settings', {} as AppSettings)
-    const merged = deepMerge(DEFAULT_SETTINGS, saved)
-    const result = AppSettingsSchema(merged)
-    if (result instanceof type.errors) {
-      const defaults = structuredClone(DEFAULT_SETTINGS)
-      if (!defaults.terminal.fontFamily) defaults.terminal.fontFamily = PLATFORM_DEFAULT_FONT
-      return { data: defaults, corrupted: true }
-    }
-    if (!result.terminal.fontFamily) result.terminal.fontFamily = PLATFORM_DEFAULT_FONT
-    return { data: result, corrupted: false }
-  })
-
-  ipcMain.handle('settings:save', (_e, s: unknown) => {
-    const result = AppSettingsSchema(s)
-    if (result instanceof type.errors) return
-    settingsStore.set('settings', result)
-  })
-
-  ipcMain.handle('settings:reset', () => {
-    const defaults = structuredClone(DEFAULT_SETTINGS)
-    if (!defaults.terminal.fontFamily) defaults.terminal.fontFamily = PLATFORM_DEFAULT_FONT
-    settingsStore.set('settings', defaults)
-    return defaults
-  })
-
+export function setupFontIpc(): void {
   ipcMain.handle('settings:get-mono-fonts', () => detectMonoFonts())
 }

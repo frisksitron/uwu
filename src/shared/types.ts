@@ -5,8 +5,19 @@ export type {
   ProjectEntry,
   TerminalCacheEntry,
   TerminalSettings,
+  UiState,
   WindowSettings
 } from './schemas'
+
+import type { UiState } from './schemas'
+
+// --- UI State defaults ---
+
+export const DEFAULT_UI_STATE: Required<UiState> = {
+  activeTabId: null,
+  sidebarCollapsed: false,
+  sidebarWidth: 240
+}
 
 import type { AppSettings } from './schemas'
 

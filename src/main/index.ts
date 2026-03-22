@@ -4,21 +4,23 @@ import { app, BrowserWindow, screen, shell } from 'electron'
 import icon from '../../resources/icon.png?asset'
 import { setupDiffIpc } from './ipc/diff'
 import { setupOpencodeIpc } from './ipc/opencode'
-import { setupProjectIpc } from './ipc/project'
-import { getSettingsStore, setupSettingsIpc } from './ipc/settings'
+import { setupDialogIpc } from './ipc/project'
+import { setupFontIpc } from './ipc/settings'
 import { killAllTerminals, setupTerminalIpc } from './ipc/terminal'
 import { setupUpdaterIpc } from './ipc/updater'
 import { setupWindowIpc } from './ipc/window'
 import { setupWorktreeIpc } from './ipc/worktree'
+import { PersistenceService } from './persistence'
+
+const persistence = new PersistenceService()
 
 function getSavedWindowState(): {
   bounds?: { x: number; y: number; width: number; height: number }
   isMaximized: boolean
 } {
-  const s = getSettingsStore().get('settings')
+  const { data: s } = persistence.loadSettings()
   if (!s.window.rememberBounds || !s.window.bounds) return { isMaximized: false }
   const b = s.window.bounds
-  // Validate bounds are on a visible display
   const displays = screen.getAllDisplays()
   const visible = displays.some((d) => {
     const { x, y, width, height } = d.workArea
@@ -65,6 +67,7 @@ function createWindow(): void {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  persistence.setupWindowBounds(mainWindow)
   for (const [name, setup] of [
     ['terminal', () => setupTerminalIpc(mainWindow)],
     ['window', () => setupWindowIpc(mainWindow)],
@@ -98,9 +101,10 @@ app.whenReady().then(() => {
   app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>')
   ensureLoopbackNoProxy()
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+  persistence.setupIpc()
   for (const [name, setup] of [
-    ['settings', setupSettingsIpc],
-    ['project', setupProjectIpc],
+    ['font', setupFontIpc],
+    ['dialog', setupDialogIpc],
     ['worktree', setupWorktreeIpc],
     ['diff', setupDiffIpc]
   ] as const) {
