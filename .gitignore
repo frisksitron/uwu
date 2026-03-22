@@ -9,3 +9,6 @@ dev-app-update.yml
 .impeccable.md
 .vscode/settings.json
 .vscode/launch.json
+resources/bin/
+resources/difftastic-src/
+.difft-build/

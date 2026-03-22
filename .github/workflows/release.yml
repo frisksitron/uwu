@@ -13,6 +13,20 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .difft-build/target
+          key: ${{ runner.os }}-difft-${{ hashFiles('scripts/build-difft.sh') }}
+
+      - name: Build difft
+        shell: bash
+        run: bash scripts/build-difft.sh
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -45,6 +59,20 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .difft-build/target
+          key: ${{ runner.os }}-difft-${{ hashFiles('scripts/build-difft.sh') }}
+
+      - name: Build difft
+        shell: bash
+        run: bash scripts/build-difft.sh
 
       - uses: pnpm/action-setup@v4
         with:
