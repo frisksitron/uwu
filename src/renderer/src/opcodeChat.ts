@@ -228,6 +228,18 @@ function ensureSmoothingLoop(): void {
 
 export { state as opcodeChat }
 
+export function getRunningToolParts(sessionId: string | undefined): OcToolPart[] {
+  if (!sessionId) return []
+  const msgs = state.messages[sessionId]
+  if (!msgs) return []
+  const lastAssistant = msgs.findLast((m) => m.role === 'assistant')
+  if (!lastAssistant) return []
+  return lastAssistant.parts.filter(
+    (p): p is OcToolPart =>
+      p.type === 'tool' && (p.state.status === 'pending' || p.state.status === 'running')
+  )
+}
+
 // --- Internal helpers ---
 
 type RawError = {
@@ -436,31 +448,23 @@ export async function sendMessage(
   images?: ImageAttachment[],
   variant?: string
 ): Promise<void> {
-  setState('isGenerating', sessionId, true)
-  setState('generationStartTimes', sessionId, Date.now())
-  try {
-    const parts: Array<
-      | { type: 'text'; text: string }
-      | { type: 'file'; mime: string; url: string; filename?: string }
-    > = []
-    if (text) {
-      parts.push({ type: 'text', text })
-    }
-    if (images) {
-      for (const img of images) {
-        parts.push({ type: 'file', mime: img.mime, url: img.dataUrl, filename: img.filename })
-      }
-    }
-    await window.opencodeAPI.sendMessage(projectPath, sessionId, {
-      parts,
-      model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
-      agent,
-      variant
-    })
-  } catch (err) {
-    console.error('[opencode] sendMessage failed:', err)
-    setState('isGenerating', sessionId, false)
+  const parts: Array<
+    { type: 'text'; text: string } | { type: 'file'; mime: string; url: string; filename?: string }
+  > = []
+  if (text) {
+    parts.push({ type: 'text', text })
   }
+  if (images) {
+    for (const img of images) {
+      parts.push({ type: 'file', mime: img.mime, url: img.dataUrl, filename: img.filename })
+    }
+  }
+  await window.opencodeAPI.sendMessage(projectPath, sessionId, {
+    parts,
+    model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
+    agent,
+    variant
+  })
 }
 
 export async function abortGeneration(projectPath: string, sessionId: string): Promise<void> {
@@ -477,22 +481,15 @@ export async function executeCommand(
   agent?: string,
   variant?: string
 ): Promise<void> {
-  setState('isGenerating', sessionId, true)
-  setState('generationStartTimes', sessionId, Date.now())
-  try {
-    await window.opencodeAPI.sessionCommand(
-      projectPath,
-      sessionId,
-      command,
-      args,
-      model ? `${model.providerID}/${model.modelID}` : undefined,
-      agent,
-      variant
-    )
-  } catch (err) {
-    console.error('[opencode] executeCommand failed:', err)
-    setState('isGenerating', sessionId, false)
-  }
+  await window.opencodeAPI.sessionCommand(
+    projectPath,
+    sessionId,
+    command,
+    args,
+    model ? `${model.providerID}/${model.modelID}` : undefined,
+    agent,
+    variant
+  )
 }
 
 export async function respondPermission(
@@ -667,6 +664,13 @@ export function initEventListener(): () => void {
           }
         }
         const msg = props.info
+        console.log('[oc:debug] message.updated', {
+          id: msg.id,
+          sid: msg.sessionID,
+          role: msg.role,
+          isNew: !state.messages[msg.sessionID]?.find((m) => m.id === msg.id),
+          msgCount: (state.messages[msg.sessionID]?.length ?? 0) + 1
+        })
 
         if (msg.role === 'user') {
           if (msg.agent) setState('sessionAgents', msg.sessionID, msg.agent)
@@ -720,6 +724,7 @@ export function initEventListener(): () => void {
 
       case 'session.idle': {
         const props = event.properties as { sessionID: string }
+        console.log('[oc:debug] session.idle', { sid: props.sessionID })
         setState('isGenerating', props.sessionID, false)
         const startTime = state.generationStartTimes[props.sessionID]
         if (startTime) {
@@ -752,7 +757,19 @@ export function initEventListener(): () => void {
           sessionID: string
           status: { type: string }
         }
-        setState('isGenerating', props.sessionID, props.status.type === 'busy')
+        // Only transition to generating; session.idle handles the transition to false.
+        // This prevents rapid status toggles from flickering the UI.
+        console.log('[oc:debug] session.status', {
+          sid: props.sessionID,
+          type: props.status.type,
+          wasGenerating: !!state.isGenerating[props.sessionID]
+        })
+        if (props.status.type === 'busy') {
+          if (!state.isGenerating[props.sessionID]) {
+            setState('generationStartTimes', props.sessionID, Date.now())
+          }
+          setState('isGenerating', props.sessionID, true)
+        }
         break
       }
 

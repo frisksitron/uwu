@@ -220,6 +220,19 @@ export function getSlashCommands(projectPath: string): SlashCommand[] {
   return state.slashCommands[projectPath] || []
 }
 
+export async function deleteSession(projectPath: string, sessionId: string): Promise<void> {
+  await window.opencodeAPI.sessionDelete(projectPath, sessionId)
+  setState(
+    produce((s: OpcodeProjectState) => {
+      const sessions = s.sessions[projectPath]
+      if (sessions) {
+        const idx = sessions.findIndex((ss) => ss.id === sessionId)
+        if (idx !== -1) sessions.splice(idx, 1)
+      }
+    })
+  )
+}
+
 export function updateSessionTitle(sessionId: string, title: string, updatedAt: number): void {
   setState(
     produce((s: OpcodeProjectState) => {

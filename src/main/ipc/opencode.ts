@@ -67,7 +67,7 @@ function spawnServer(port: number, password: string): ChildProcess {
     {
       env: {
         ...process.env,
-        OPENCODE_CLIENT: 'uwu',
+        OPENCODE_CLIENT: 'desktop',
         OPENCODE_SERVER_USERNAME: 'uwu',
         OPENCODE_SERVER_PASSWORD: password
       },
