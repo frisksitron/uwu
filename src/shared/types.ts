@@ -61,12 +61,17 @@ export interface Project {
 // Diff data types
 export type DiffFileStatus = 'added' | 'modified' | 'deleted' | 'renamed'
 
+export interface DiffInlineSpan {
+  start: number
+  end: number
+}
+
 export interface DiffRow {
-  type: 'context' | 'add' | 'remove' | 'modify'
+  type: 'context' | 'add' | 'remove'
   oldLineNo: number | null
   newLineNo: number | null
-  oldContent: string | null
-  newContent: string | null
+  content: string
+  highlights?: DiffInlineSpan[]
 }
 
 export interface DiffHunk {

@@ -2,11 +2,12 @@ import { execFile } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import { extname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import type {
   DiffFile,
   DiffFileStatus,
   DiffHunk,
+  DiffInlineSpan,
   DiffResult,
   DiffRow,
   DiffShortStat
@@ -15,6 +16,13 @@ import type {
 const execFileAsync = promisify(execFile)
 
 const CONTEXT_LINES = 3
+
+/** Resolve the path to the bundled difft binary (forward slashes for git). */
+function getDifftPath(): string {
+  const base = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+  const p = join(base, 'bin', `difft${process.platform === 'win32' ? '.exe' : ''}`)
+  return p.replaceAll('\\', '/')
+}
 
 /** Strip \r from line endings (Windows git output) */
 function stripCR(s: string): string {
@@ -121,11 +129,18 @@ function getNameStatus(stdout: string): Map<string, { status: DiffFileStatus; ol
 
 // --- Difftastic structural diff ---
 
-// --- Difftastic JSON types (DFT_DISPLAY=json DFT_UNSTABLE=yes) ---
+// --- Difftastic JSON types (DFT_DISPLAY=json DFT_UNSTABLE=yes, v0.69+) ---
+
+interface DifftChange {
+  start: number
+  end: number
+  content: string
+  highlight: string
+}
 
 interface DifftSide {
   line_number: number
-  changes: unknown[]
+  changes: DifftChange[]
 }
 
 interface DifftEntry {
@@ -137,122 +152,86 @@ interface DifftasticFile {
   path: string
   language: string
   status: string
+  aligned_lines: [number | null, number | null][]
   chunks: DifftEntry[][]
 }
 
-/**
- * Build complete aligned rows from difftastic chunks + file content.
- * Chunks only contain changed lines; we fill in context from file content.
- */
-function buildRowsFromChunks(
-  chunks: DifftEntry[][],
-  oldLines: string[],
-  newLines: string[]
-): DiffRow[] {
-  // Collect all changed line numbers per side
-  const changedOld = new Set<number>()
-  const changedNew = new Set<number>()
-  // Map modified lines: old line → new line (and vice versa)
-  const oldToNew = new Map<number, number>()
-
+/** Build O(1) lookup maps from chunks, keyed by line number per side. */
+function buildChunkIndex(chunks: DifftEntry[][]) {
+  const lhs = new Map<number, DifftChange[]>()
+  const rhs = new Map<number, DifftChange[]>()
   for (const chunk of chunks) {
     for (const entry of chunk) {
-      if (entry.lhs && entry.rhs) {
-        // Modified line
-        changedOld.add(entry.lhs.line_number)
-        changedNew.add(entry.rhs.line_number)
-        oldToNew.set(entry.lhs.line_number, entry.rhs.line_number)
-      } else if (entry.lhs) {
-        changedOld.add(entry.lhs.line_number)
-      } else if (entry.rhs) {
-        changedNew.add(entry.rhs.line_number)
-      }
+      if (entry.lhs) lhs.set(entry.lhs.line_number, entry.lhs.changes)
+      if (entry.rhs) rhs.set(entry.rhs.line_number, entry.rhs.changes)
     }
   }
+  return { lhs, rhs }
+}
 
-  // Two-pointer walk through old and new files
+/** Convert difftastic change spans to inline highlight ranges. */
+function changesToHighlights(changes: DifftChange[]): DiffInlineSpan[] | undefined {
+  if (changes.length === 0) return undefined
+  return changes.map((c) => ({ start: c.start, end: c.end }))
+}
+
+/** Walk aligned_lines to produce DiffRow[] directly from difftastic output. */
+function buildRowsFromAlignedLines(
+  alignedLines: [number | null, number | null][],
+  oldLines: string[],
+  newLines: string[],
+  chunks: DifftEntry[][]
+): DiffRow[] {
+  const { lhs, rhs } = buildChunkIndex(chunks)
   const rows: DiffRow[] = []
-  let oi = 0
-  let ni = 0
 
-  while (oi < oldLines.length || ni < newLines.length) {
-    const oldIsChanged = oi < oldLines.length && changedOld.has(oi)
-    const newIsChanged = ni < newLines.length && changedNew.has(ni)
+  for (const [oldIdx, newIdx] of alignedLines) {
+    if (oldIdx != null && newIdx != null) {
+      const lhsChanges = lhs.get(oldIdx)
+      const rhsChanges = rhs.get(newIdx)
 
-    if (!oldIsChanged && !newIsChanged) {
-      // Context line — both sides advance together
-      if (oi < oldLines.length && ni < newLines.length) {
-        rows.push({
-          type: 'context',
-          oldLineNo: oi + 1,
-          newLineNo: ni + 1,
-          oldContent: oldLines[oi],
-          newContent: newLines[ni]
-        })
-        oi++
-        ni++
-      } else if (oi < oldLines.length) {
+      if (lhsChanges || rhsChanges) {
+        // Modified line — emit remove then add with highlights
         rows.push({
           type: 'remove',
-          oldLineNo: oi + 1,
+          oldLineNo: oldIdx + 1,
           newLineNo: null,
-          oldContent: oldLines[oi],
-          newContent: null
+          content: oldLines[oldIdx] ?? '',
+          highlights: lhsChanges ? changesToHighlights(lhsChanges) : undefined
         })
-        oi++
+        rows.push({
+          type: 'add',
+          oldLineNo: null,
+          newLineNo: newIdx + 1,
+          content: newLines[newIdx] ?? '',
+          highlights: rhsChanges ? changesToHighlights(rhsChanges) : undefined
+        })
       } else {
         rows.push({
-          type: 'add',
-          oldLineNo: null,
-          newLineNo: ni + 1,
-          oldContent: null,
-          newContent: newLines[ni]
+          type: 'context',
+          oldLineNo: oldIdx + 1,
+          newLineNo: newIdx + 1,
+          content: newLines[newIdx] ?? ''
         })
-        ni++
       }
-    } else if (oldIsChanged && oldToNew.has(oi)) {
-      // Modified line — use mapped new line to avoid desync from interleaved adds/removes
-      const mappedNi = oldToNew.get(oi) as number
-      // Emit any added new lines between current ni and the mapped position
-      while (ni < mappedNi) {
-        rows.push({
-          type: 'add',
-          oldLineNo: null,
-          newLineNo: ni + 1,
-          oldContent: null,
-          newContent: newLines[ni]
-        })
-        ni++
-      }
-      rows.push({
-        type: 'modify',
-        oldLineNo: oi + 1,
-        newLineNo: mappedNi + 1,
-        oldContent: oldLines[oi],
-        newContent: newLines[mappedNi]
-      })
-      oi++
-      ni = mappedNi + 1
-    } else if (oldIsChanged) {
-      // Deleted line — only old side advances
+    } else if (oldIdx != null) {
+      const lhsChanges = lhs.get(oldIdx)
       rows.push({
         type: 'remove',
-        oldLineNo: oi + 1,
+        oldLineNo: oldIdx + 1,
         newLineNo: null,
-        oldContent: oldLines[oi],
-        newContent: null
+        content: oldLines[oldIdx] ?? '',
+        highlights: lhsChanges ? changesToHighlights(lhsChanges) : undefined
       })
-      oi++
-    } else {
-      // Added line — only new side advances
+    } else if (newIdx != null) {
+      const rhsChanges = rhs.get(newIdx)
       rows.push({
         type: 'add',
         oldLineNo: null,
-        newLineNo: ni + 1,
-        oldContent: null,
-        newContent: newLines[ni]
+        newLineNo: newIdx + 1,
+        content: newLines[newIdx] ?? '',
+        highlights: rhsChanges ? changesToHighlights(rhsChanges) : undefined
       })
-      ni++
     }
   }
 
@@ -310,9 +289,11 @@ async function readFileContent(fullPath: string): Promise<string | null> {
 async function getDifftasticHunks(
   cwd: string,
   mode: 'unstaged' | 'staged' | 'all',
-  modeArgs: string[]
+  modeArgs: string[],
+  nameStatus: Map<string, { status: DiffFileStatus; oldPath?: string }>
 ): Promise<Map<string, DiffHunk[]>> {
-  const stdout = await git(['-c', 'diff.external=difft', 'diff', ...modeArgs], cwd, {
+  const difftPath = getDifftPath()
+  const stdout = await git(['-c', `diff.external=${difftPath}`, 'diff', ...modeArgs], cwd, {
     DFT_DISPLAY: 'json',
     DFT_UNSTABLE: 'yes'
   })
@@ -333,9 +314,12 @@ async function getDifftasticHunks(
     jsonObjects.map(async (obj) => {
       try {
         if (!obj.path || obj.status === 'unchanged') return
-        if (!Array.isArray(obj.chunks) || obj.chunks.length === 0) return
+        if (!Array.isArray(obj.aligned_lines) || obj.aligned_lines.length === 0) return
 
-        const oldContent = await getFileContent(cwd, 'HEAD', obj.path)
+        // For renames, use the old path when fetching from HEAD
+        const oldPath = nameStatus.get(obj.path)?.oldPath ?? obj.path
+
+        const oldContent = await getFileContent(cwd, 'HEAD', oldPath)
         const newContent =
           mode === 'staged'
             ? await getFileContent(cwd, ':0', obj.path)
@@ -343,7 +327,7 @@ async function getDifftasticHunks(
 
         const oldLines = oldContent?.split('\n') ?? []
         const newLines = newContent?.split('\n') ?? []
-        const rows = buildRowsFromChunks(obj.chunks, oldLines, newLines)
+        const rows = buildRowsFromAlignedLines(obj.aligned_lines, oldLines, newLines, obj.chunks)
         const hunks = groupIntoHunks(rows)
         if (hunks.length > 0) {
           hunksMap.set(obj.path, hunks)
@@ -396,15 +380,15 @@ export function setupDiffIpc(): void {
     const modeArgs = diffMode === 'staged' ? ['--cached'] : diffMode === 'all' ? ['HEAD'] : []
 
     try {
-      // 1. Get file list, stats, and difftastic hunks in parallel
-      const [numstatOut, nameStatusOut, difftHunks] = await Promise.all([
+      // 1. Get file metadata first (fast), then difftastic hunks with nameStatus
+      const [numstatOut, nameStatusOut] = await Promise.all([
         git(['diff', '--no-ext-diff', '--numstat', ...modeArgs], cwd).catch(() => ''),
-        git(['diff', '--no-ext-diff', '--name-status', '-M', ...modeArgs], cwd).catch(() => ''),
-        getDifftasticHunks(cwd, diffMode, modeArgs)
+        git(['diff', '--no-ext-diff', '--name-status', '-M', ...modeArgs], cwd).catch(() => '')
       ])
 
       const numstat = getNumstat(numstatOut)
       const nameStatus = getNameStatus(nameStatusOut)
+      const difftHunks = await getDifftasticHunks(cwd, diffMode, modeArgs, nameStatus)
 
       // 2. Build file list from name-status (authoritative source for which files changed)
       const files: DiffFile[] = []

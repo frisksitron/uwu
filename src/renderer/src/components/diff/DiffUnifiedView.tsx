@@ -1,32 +1,62 @@
 import { createMemo, For, type JSX, Show } from 'solid-js'
-import type { DiffFile, DiffRow } from '../../../../shared/types'
-import { computeInlineSpans } from '../../lib/inlineDiff'
-import InlineContent from './InlineContent'
+import type { DiffFile, DiffInlineSpan, DiffRow } from '../../../../shared/types'
 
 interface DiffUnifiedViewProps {
   files: DiffFile[]
   fileRefs: Map<number, HTMLDivElement>
 }
 
-/** A display row that carries partner content for inline highlighting of modify pairs. */
-interface DisplayRow extends DiffRow {
-  partnerContent?: string | null
+function HighlightedLine(props: {
+  content: string
+  highlights: DiffInlineSpan[]
+  type: 'add' | 'remove'
+}): JSX.Element {
+  const segments = createMemo(() => {
+    const segs: { text: string; highlighted: boolean }[] = []
+    let pos = 0
+    const sorted = [...props.highlights].sort((a, b) => a.start - b.start)
+    for (const h of sorted) {
+      if (h.start > pos) {
+        segs.push({ text: props.content.slice(pos, h.start), highlighted: false })
+      }
+      segs.push({ text: props.content.slice(h.start, h.end), highlighted: true })
+      pos = h.end
+    }
+    if (pos < props.content.length) {
+      segs.push({ text: props.content.slice(pos), highlighted: false })
+    }
+    return segs
+  })
+
+  return (
+    <For each={segments()}>
+      {(seg) => (
+        <span
+          classList={{
+            'diff-inline-add': seg.highlighted && props.type === 'add',
+            'diff-inline-remove': seg.highlighted && props.type === 'remove'
+          }}
+        >
+          {seg.text}
+        </span>
+      )}
+    </For>
+  )
 }
 
-function RowContent(props: { row: DisplayRow }): JSX.Element {
-  const row = props.row
-  if (row.partnerContent != null) {
-    const spans = createMemo(() => {
-      const old = row.type === 'remove' ? (row.oldContent ?? '') : (row.partnerContent ?? '')
-      const cur = row.type === 'remove' ? (row.partnerContent ?? '') : (row.newContent ?? '')
-      return computeInlineSpans(old, cur)
-    })
-    if (row.type === 'remove') {
-      return <InlineContent spans={spans().oldSpans} type="remove" />
-    }
-    return <InlineContent spans={spans().newSpans} type="add" />
-  }
-  return <>{row.type === 'add' ? (row.newContent ?? '') : (row.oldContent ?? '')}</>
+function RowContent(props: { row: DiffRow }): JSX.Element {
+  const highlights = () => props.row.highlights
+  return (
+    <Show when={highlights()} fallback={<>{props.row.content}</>}>
+      {(hl) => (
+        <HighlightedLine
+          content={props.row.content}
+          highlights={hl()}
+          type={props.row.type as 'add' | 'remove'}
+        />
+      )}
+    </Show>
+  )
 }
 
 function FileSection(props: {
@@ -66,68 +96,41 @@ function FileSection(props: {
           <table class="diff-table w-full border-collapse font-mono text-[11px] leading-[1.5]">
             <tbody>
               <For each={props.file.hunks}>
-                {(hunk, hunkIdx) => {
-                  const rows = createMemo((): DisplayRow[] => {
-                    const result: DisplayRow[] = []
-                    for (const row of hunk.rows) {
-                      if (row.type === 'modify') {
-                        result.push({
-                          ...row,
-                          type: 'remove',
-                          newLineNo: null,
-                          newContent: null,
-                          partnerContent: row.newContent
-                        })
-                        result.push({
-                          ...row,
-                          type: 'add',
-                          oldLineNo: null,
-                          oldContent: null,
-                          partnerContent: row.oldContent
-                        })
-                      } else {
-                        result.push(row)
-                      }
-                    }
-                    return result
-                  })
-
-                  return (
-                    <>
-                      <Show when={hunkIdx() > 0}>
-                        <tr class="diff-hunk-sep">
-                          <td
-                            colspan={3}
-                            class="px-2 py-0.5 text-[11px] text-muted bg-hover/50 border-y border-border/40"
-                          >
-                            ···
+                {(hunk, hunkIdx) => (
+                  <>
+                    <Show when={hunkIdx() > 0}>
+                      <tr class="diff-hunk-sep">
+                        <td
+                          colspan={3}
+                          class="px-2 py-0.5 text-[11px] text-muted bg-hover/50 border-y border-border/40"
+                        >
+                          ···
+                        </td>
+                      </tr>
+                    </Show>
+                    <For each={hunk.rows}>
+                      {(row) => (
+                        <tr
+                          classList={{
+                            'diff-row-add': row.type === 'add',
+                            'diff-row-remove': row.type === 'remove',
+                            'diff-row-context': row.type === 'context'
+                          }}
+                        >
+                          <td class="diff-gutter diff-gutter-old select-none text-right px-1.5 text-muted/60">
+                            {row.oldLineNo ?? ''}
+                          </td>
+                          <td class="diff-gutter diff-gutter-new select-none text-right px-1.5 text-muted/60">
+                            {row.newLineNo ?? ''}
+                          </td>
+                          <td class="diff-content px-2 whitespace-pre">
+                            <RowContent row={row} />
                           </td>
                         </tr>
-                      </Show>
-                      <For each={rows()}>
-                        {(row) => (
-                          <tr
-                            classList={{
-                              'diff-row-add': row.type === 'add',
-                              'diff-row-remove': row.type === 'remove',
-                              'diff-row-context': row.type === 'context'
-                            }}
-                          >
-                            <td class="diff-gutter diff-gutter-old select-none text-right px-1.5 text-muted/60">
-                              {row.oldLineNo ?? ''}
-                            </td>
-                            <td class="diff-gutter diff-gutter-new select-none text-right px-1.5 text-muted/60">
-                              {row.newLineNo ?? ''}
-                            </td>
-                            <td class="diff-content px-2 whitespace-pre">
-                              <RowContent row={row} />
-                            </td>
-                          </tr>
-                        )}
-                      </For>
-                    </>
-                  )
-                }}
+                      )}
+                    </For>
+                  </>
+                )}
               </For>
             </tbody>
           </table>
