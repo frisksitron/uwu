@@ -1,4 +1,5 @@
 import { Check, Copy } from 'lucide-solid'
+import remarkGfm from 'remark-gfm'
 import type { BundledLanguage } from 'shiki'
 import { createMemo, createSignal, For, type JSX, Show } from 'solid-js'
 import { SolidMarkdown } from 'solid-markdown'
@@ -106,6 +107,7 @@ function MarkdownText(props: { text: string }): JSX.Element {
     <SolidMarkdown
       renderingStrategy="reconcile"
       children={props.text}
+      remarkPlugins={[remarkGfm]}
       components={{
         code(p) {
           return (

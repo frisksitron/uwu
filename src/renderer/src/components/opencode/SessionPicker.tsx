@@ -1,3 +1,4 @@
+import { X } from 'lucide-solid'
 import { For, type JSX, Show } from 'solid-js'
 import type { OcSession } from '../../opcodeProject'
 
@@ -5,6 +6,7 @@ interface SessionPickerProps {
   sessions: OcSession[]
   currentSessionId: string
   onSelect: (sessionId: string) => void
+  onDelete?: (sessionId: string) => void
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -36,19 +38,36 @@ export default function SessionPicker(props: SessionPickerProps): JSX.Element {
       <div class="flex flex-col">
         <For each={sorted()}>
           {(session) => (
-            <button
-              type="button"
-              onClick={() => props.onSelect(session.id)}
-              class="flex items-center gap-2 px-3 py-1.5 text-left bg-transparent border-none cursor-pointer rounded transition-colors hover:bg-hover"
+            <div
+              class="group flex items-center rounded transition-colors hover:bg-hover"
               classList={{
                 'bg-active': session.id === props.currentSessionId
               }}
             >
-              <span class="flex-1 text-content text-[13px] truncate">{session.title}</span>
-              <span class="text-muted text-[11px] flex-shrink-0">
-                {formatRelativeTime(session.updatedAt)}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => props.onSelect(session.id)}
+                class="flex-1 flex items-center gap-2 px-3 py-1.5 text-left bg-transparent border-none cursor-pointer min-w-0"
+              >
+                <span class="flex-1 text-content text-[13px] truncate">{session.title}</span>
+                <span class="text-muted text-[11px] flex-shrink-0 group-hover:hidden">
+                  {formatRelativeTime(session.updatedAt)}
+                </span>
+              </button>
+              <Show when={props.onDelete}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    props.onDelete?.(session.id)
+                  }}
+                  class="hidden group-hover:flex items-center justify-center w-6 h-6 mr-1 rounded bg-transparent border-none cursor-pointer text-muted hover:text-error hover:bg-error/10 transition-colors flex-shrink-0"
+                  title="Delete session"
+                >
+                  <X size={12} />
+                </button>
+              </Show>
+            </div>
           )}
         </For>
       </div>

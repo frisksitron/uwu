@@ -33,7 +33,7 @@ function fileIcon(type: OcPatchFileInfo['type']): JSX.Element {
   }
 }
 
-function highlightDiff(code: string): string | null {
+export function highlightDiff(code: string): string | null {
   const hl = getHighlighter()
   if (!hl) return null
   try {

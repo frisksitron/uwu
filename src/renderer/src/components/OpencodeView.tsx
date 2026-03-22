@@ -7,7 +7,6 @@ import {
   loadMessages,
   opcodeChat,
   rejectQuestion,
-  respondPermission,
   respondQuestion,
   sendMessage
 } from '../opcodeChat'
@@ -21,6 +20,7 @@ import {
 } from '../opcodeLocal'
 import {
   createSession,
+  deleteSession,
   getSlashCommands,
   loadAgents,
   loadConfig,
@@ -30,6 +30,7 @@ import {
   opcodeProject
 } from '../opcodeProject'
 import { startServer } from '../opcodeServer'
+import ActivityBox from './opencode/ActivityBox'
 import ChatInput from './opencode/ChatInput'
 import MessageList from './opencode/MessageList'
 import RawEventLog from './opencode/RawEventLog'
@@ -40,6 +41,7 @@ interface OpencodeViewProps {
   visible: boolean
   projectPath: string
   sessionId?: string
+  label: string
   onSessionChange: (sessionId: string) => void
   onTitleChange?: (title: string) => void
 }
@@ -100,8 +102,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
 
   const messages = () => (props.sessionId ? opcodeChat.messages[props.sessionId] : undefined) || []
   const isGenerating = () => (props.sessionId && opcodeChat.isGenerating[props.sessionId]) || false
-  const permissions = () =>
-    (props.sessionId ? opcodeChat.pendingPermissions[props.sessionId] : undefined) || []
+
   const questions = () =>
     (props.sessionId ? opcodeChat.pendingQuestions[props.sessionId] : undefined) || []
   const streamingContent = () => opcodeChat.smoothContent
@@ -161,15 +162,8 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
   })
 
   async function handleSend(text: string, images: ImageAttachment[]): Promise<void> {
-    let sessionId = props.sessionId
-    if (!sessionId) {
-      const newSession = await createSession(props.projectPath)
-      if (!newSession) return
-      sessionId = newSession.id
-      // Promote draft selections to the new session
-      promote(props.projectPath, sessionId)
-      props.onSessionChange(sessionId)
-    }
+    const sessionId = props.sessionId
+    if (!sessionId) return
 
     // Parse slash commands: /command args
     if (text.startsWith('/')) {
@@ -198,14 +192,6 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     await abortGeneration(props.projectPath, props.sessionId)
   }
 
-  async function handlePermission(
-    permissionId: string,
-    response: 'once' | 'always' | 'reject'
-  ): Promise<void> {
-    if (!props.sessionId) return
-    await respondPermission(props.projectPath, props.sessionId, permissionId, response)
-  }
-
   async function handleQuestionRespond(
     requestId: string,
     answers: Array<Array<string>>
@@ -232,6 +218,14 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
     await loadMessages(props.projectPath, sessionId)
     setLockedToBottom(true)
     requestAnimationFrame(() => scrollToBottom())
+  }
+
+  async function handleDeleteSession(sessionId: string): Promise<void> {
+    await deleteSession(props.projectPath, sessionId)
+    // If the deleted session was the active one, clear it
+    if (props.sessionId === sessionId) {
+      props.onSessionChange('')
+    }
   }
 
   function handleModelChange(m: { providerID: string; modelID: string } | undefined): void {
@@ -278,7 +272,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
         {/* Top bar */}
         <div class="flex items-center gap-2 px-3 h-9 border-b border-border bg-sidebar flex-shrink-0">
           <span class="flex-1 text-[13px] text-content truncate font-medium">
-            {session()?.title || 'AI Chat'}
+            {session()?.title || props.label}
           </span>
           <button
             type="button"
@@ -320,6 +314,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
                   sessions={sessions()}
                   currentSessionId={props.sessionId ?? ''}
                   onSelect={handleSelectSession}
+                  onDelete={handleDeleteSession}
                 />
               </div>
             </Show>
@@ -343,54 +338,50 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
             onScroll={handleScroll}
           >
             <div ref={contentRef} class="min-h-full flex flex-col">
-              <Show
-                when={messages().length > 0}
-                fallback={
-                  <div class="flex items-center justify-center flex-1">
-                    <div class="w-72 max-h-full overflow-y-auto">
-                      <Show
-                        when={sessions().filter((s) => s.id !== (props.sessionId ?? '')).length > 0}
-                        fallback={
-                          <div class="flex flex-col items-center gap-2 select-none text-center">
-                            <Sparkles size={28} class="text-icon-ai opacity-50" />
-                            <p class="text-content text-[13px] opacity-60 m-0">
-                              Ready when you are~
-                            </p>
-                            <p class="text-muted text-[11px] opacity-50 m-0">
-                              Type a message, or <span class="font-mono text-accent">/</span> for
-                              commands
-                            </p>
-                          </div>
-                        }
-                      >
-                        <p class="text-muted text-[11px] font-medium mb-1 mt-4 px-3 select-none">
+              {/* Always mounted — empty <For> renders nothing, no teardown on session change */}
+              <MessageList
+                messages={messages()}
+                streamingContent={streamingContent()}
+                generationDuration={generationDuration()}
+              />
+              {/* Empty state — shown when idle with no messages */}
+              <Show when={!props.sessionId && messages().length === 0 && !isGenerating()}>
+                <div class="flex items-center justify-center flex-1">
+                  <div class="w-72">
+                    <div class="flex flex-col items-center gap-2 select-none text-center mb-4">
+                      <Sparkles size={28} class="text-icon-ai/60" />
+                      <p class="text-muted text-[13px] m-0">Ready when you are~</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleNewSession}
+                      class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-[13px] font-medium border-none cursor-pointer hover:brightness-105 transition-all shadow-sm"
+                    >
+                      <Plus size={14} />
+                      New session
+                    </button>
+
+                    {/* Previous sessions list — capped height to keep layout centered */}
+                    <Show
+                      when={sessions().filter((s) => s.id !== (props.sessionId ?? '')).length > 0}
+                    >
+                      <div class="border-t border-border mt-4 pt-3">
+                        <p class="text-muted text-[11px] font-medium mb-1 px-3 select-none">
                           Previous sessions
                         </p>
-                        <SessionPicker
-                          sessions={sessions().filter((s) => s.id !== (props.sessionId ?? ''))}
-                          currentSessionId={props.sessionId ?? ''}
-                          onSelect={handleSelectSession}
-                        />
-                        <div class="border-t border-border mt-2 pt-2 px-3">
-                          <p class="text-muted text-[11px] opacity-60 select-none text-center">
-                            or send a message to start a new conversation
-                          </p>
+                        <div class="max-h-48 overflow-y-auto">
+                          <SessionPicker
+                            sessions={sessions().filter((s) => s.id !== (props.sessionId ?? ''))}
+                            currentSessionId={props.sessionId ?? ''}
+                            onSelect={handleSelectSession}
+                            onDelete={handleDeleteSession}
+                          />
                         </div>
-                      </Show>
-                    </div>
+                      </div>
+                    </Show>
                   </div>
-                }
-              >
-                <MessageList
-                  messages={messages()}
-                  streamingContent={streamingContent()}
-                  generationDuration={generationDuration()}
-                  permissions={permissions()}
-                  questions={questions()}
-                  onPermissionRespond={handlePermission}
-                  onQuestionRespond={handleQuestionRespond}
-                  onQuestionReject={handleQuestionReject}
-                />
+                </div>
               </Show>
             </div>
 
@@ -399,7 +390,7 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
               <button
                 type="button"
                 onClick={scrollToBottom}
-                class="sticky bottom-3 left-1/2 -translate-x-1/2 bg-sidebar/90 hover:bg-hover border border-border rounded-full p-1.5 cursor-pointer shadow-md transition-colors flex items-center z-20"
+                class="sticky bottom-3 left-1/2 -translate-x-1/2 bg-sidebar/90 hover:bg-hover border border-border rounded-full p-2 cursor-pointer shadow-md transition-colors flex items-center z-20"
                 title="Jump to bottom"
               >
                 <ChevronDown size={14} class="text-accent" />
@@ -414,23 +405,36 @@ export default function OpencodeView(props: OpencodeViewProps): JSX.Element {
           </Show>
         </div>
 
-        {/* Chat input */}
-        <ChatInput
-          isGenerating={isGenerating()}
-          generationStartTime={generationStartTime()}
-          history={inputHistory()}
-          slashCommands={getSlashCommands(props.projectPath)}
-          onSend={handleSend}
-          onAbort={handleAbort}
-          visible={props.visible}
-          projectPath={props.projectPath}
-          model={model()}
-          onModelChange={handleModelChange}
-          agent={agent()}
-          onAgentChange={handleAgentChange}
-          variant={variant()}
-          onVariantChange={handleVariantChange}
-        />
+        {/* Chat input + activity box overlay — only when a session is active */}
+        <Show when={props.sessionId}>
+          <div class="relative flex-shrink-0">
+            <div class="absolute bottom-full left-0 right-0 z-10">
+              <ActivityBox
+                sessionId={props.sessionId}
+                isGenerating={isGenerating()}
+                questions={questions()}
+                onQuestionRespond={handleQuestionRespond}
+                onQuestionReject={handleQuestionReject}
+              />
+            </div>
+            <ChatInput
+              isGenerating={isGenerating()}
+              generationStartTime={generationStartTime()}
+              history={inputHistory()}
+              slashCommands={getSlashCommands(props.projectPath)}
+              onSend={handleSend}
+              onAbort={handleAbort}
+              visible={props.visible}
+              projectPath={props.projectPath}
+              model={model()}
+              onModelChange={handleModelChange}
+              agent={agent()}
+              onAgentChange={handleAgentChange}
+              variant={variant()}
+              onVariantChange={handleVariantChange}
+            />
+          </div>
+        </Show>
       </Show>
     </div>
   )

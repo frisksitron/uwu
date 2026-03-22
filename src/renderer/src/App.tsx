@@ -9,7 +9,7 @@ import {
   onMount,
   Show
 } from 'solid-js'
-import { unwrap } from 'solid-js/store'
+import { produce, unwrap } from 'solid-js/store'
 import DiffView from './components/DiffView'
 import OpencodeView from './components/OpencodeView'
 import ScriptView from './components/ScriptView'
@@ -194,67 +194,51 @@ export default function App(): JSX.Element {
   }
 
   function handleProcessChange(itemId: string, projectId: string, processName: string): void {
-    const project = store.projects.find((p) => p.id === projectId)
-    if (!project) return
-    for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
-      const item = items.find((i) => i.id === itemId)
-      if (item?.type === 'terminal' && !item.customLabel) {
-        if (processName === item.label) return // skip no-op
-        setStore(
-          'projects',
-          (p) => p.id === projectId,
-          'workspaces',
-          cwd,
-          (ws) =>
-            (ws ?? []).map((i) =>
-              i.id === itemId && i.type === 'terminal' ? { ...i, label: processName } : i
-            )
-        )
-        return
-      }
-    }
+    setStore(
+      'projects',
+      (p) => p.id === projectId,
+      produce((project) => {
+        for (const items of Object.values(project.workspaces ?? {})) {
+          const item = items.find((i) => i.id === itemId)
+          if (item?.type === 'terminal' && !item.customLabel && item.label !== processName) {
+            item.label = processName
+            return
+          }
+        }
+      })
+    )
   }
 
   function handleSessionChange(itemId: string, projectId: string, sessionId: string): void {
-    const project = store.projects.find((p) => p.id === projectId)
-    if (!project) return
-    for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
-      const item = items.find((i) => i.id === itemId)
-      if (item?.type === 'opencode') {
-        setStore(
-          'projects',
-          (p) => p.id === projectId,
-          'workspaces',
-          cwd,
-          (ws) =>
-            (ws ?? []).map((i) =>
-              i.id === itemId && i.type === 'opencode' ? { ...i, sessionId } : i
-            )
-        )
-        return
-      }
-    }
+    setStore(
+      'projects',
+      (p) => p.id === projectId,
+      produce((project) => {
+        for (const items of Object.values(project.workspaces ?? {})) {
+          const item = items.find((i) => i.id === itemId)
+          if (item?.type === 'opencode') {
+            item.sessionId = sessionId
+            return
+          }
+        }
+      })
+    )
   }
 
   function handleTitleChange(itemId: string, projectId: string, title: string): void {
-    const project = store.projects.find((p) => p.id === projectId)
-    if (!project) return
-    for (const [cwd, items] of Object.entries(project.workspaces ?? {})) {
-      const item = items.find((i) => i.id === itemId)
-      if (item?.type === 'opencode' && title !== item.label) {
-        setStore(
-          'projects',
-          (p) => p.id === projectId,
-          'workspaces',
-          cwd,
-          (ws) =>
-            (ws ?? []).map((i) =>
-              i.id === itemId && i.type === 'opencode' ? { ...i, label: title } : i
-            )
-        )
-        return
-      }
-    }
+    setStore(
+      'projects',
+      (p) => p.id === projectId,
+      produce((project) => {
+        for (const items of Object.values(project.workspaces ?? {})) {
+          const item = items.find((i) => i.id === itemId)
+          if (item?.type === 'opencode' && item.label !== title) {
+            item.label = title
+            return
+          }
+        }
+      })
+    )
   }
 
   function getItemCommand(item: WorkspaceTab): string {
@@ -276,6 +260,7 @@ export default function App(): JSX.Element {
           visible={store.activeTabId === item.id}
           projectPath={cwd}
           sessionId={item.sessionId}
+          label={item.label}
           onSessionChange={(sid) => handleSessionChange(item.id, projectId, sid)}
           onTitleChange={(title) => handleTitleChange(item.id, projectId, title)}
         />

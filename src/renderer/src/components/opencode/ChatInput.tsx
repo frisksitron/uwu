@@ -319,7 +319,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
         <button
           type="button"
           onClick={() => fileInputRef?.click()}
-          class="bg-transparent hover:bg-hover border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center text-muted hover:text-content"
+          class="bg-transparent hover:bg-hover border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center text-muted hover:text-content active:scale-95"
           title="Attach images"
         >
           <ImagePlus size={14} />
@@ -358,7 +358,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
               type="button"
               onClick={submit}
               disabled={!canSend()}
-              class="bg-accent hover:bg-accent/80 disabled:opacity-30 text-white border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center disabled:cursor-default h-7 w-7"
+              class="bg-accent hover:bg-accent/80 disabled:opacity-40 text-white border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center disabled:cursor-default h-7 w-7 active:scale-95"
               title="Send"
             >
               <ArrowUp size={14} />
@@ -368,7 +368,7 @@ export default function ChatInput(props: ChatInputProps): JSX.Element {
           <button
             type="button"
             onClick={() => props.onAbort()}
-            class="bg-status-stop hover:bg-status-stop/80 text-white border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center h-7 w-7"
+            class="bg-status-stop hover:bg-status-stop/80 text-white border-none cursor-pointer p-1.5 rounded-lg transition-colors flex items-center justify-center h-7 w-7 active:scale-95"
             title="Stop generating"
           >
             <Square size={14} />
