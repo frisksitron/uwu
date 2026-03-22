@@ -1,9 +1,9 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
-import path from 'node:path'
+import path, { join } from 'node:path'
 import { createOpencodeClient, type OpencodeClient } from '@opencode-ai/sdk/v2'
-import { type BrowserWindow, ipcMain } from 'electron'
+import { app, type BrowserWindow, ipcMain } from 'electron'
 
 interface SharedServer {
   client: OpencodeClient
@@ -51,9 +51,15 @@ async function getAvailablePort(): Promise<number> {
   })
 }
 
+function getOpencodePath(): string {
+  const base = app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
+  const bin = join(base, 'bin', `opencode${process.platform === 'win32' ? '.exe' : ''}`)
+  return bin.replaceAll('\\', '/')
+}
+
 function spawnServer(port: number, password: string): ChildProcess {
   return spawn(
-    'opencode',
+    getOpencodePath(),
     [
       '--print-logs',
       '--log-level',
